@@ -33,7 +33,7 @@ class FakeAmapClient:
         ]
 
     async def search_text_pois(self, keywords: str, city: str, types: str = "050000") -> list[PoiRecord]:
-        if "必吃" in keywords:
+        if "状元" in keywords or "必吃" in keywords:
             return [PoiRecord(id="cheap", name="萨莉亚", lng=116.45, lat=39.98, address="凯德B1", rating="4.8", cost=54)]
         if "烟火" in keywords:
             return [PoiRecord(id="street", name="胡同面馆", lng=116.45, lat=39.98, address="小巷", rating="4.2", cost=28)]
@@ -226,6 +226,7 @@ def test_restaurant_search_marks_saojie_boards(client: TestClient) -> None:
     by_name = {item["name"]: item for item in payload["places"]}
     assert by_name["萨莉亚"]["board"] == "champion"
     assert by_name["胡同面馆"]["board"] == "street"
+    assert "amap.com/ranking/" in payload["amap_ranking_url"]
 
 
 def test_places_search_requires_origin(client: TestClient) -> None:

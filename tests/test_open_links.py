@@ -7,7 +7,7 @@ import re
 
 from app.budget import couple_budget, is_over_budget
 from app.distance import centroid, midpoint, search_radius_from_points, search_radius_m
-from app.open_links import build_open_links, plain_city
+from app.open_links import amap_ranking_url, build_open_links, plain_city
 
 
 def test_restaurant_links_include_meituan_and_dianping() -> None:
@@ -28,6 +28,7 @@ def test_restaurant_links_include_meituan_and_dianping() -> None:
     assert links.dianping is not None
     assert "/keyword/2/10_" in links.dianping
     assert links.ctrip is None
+    assert links.amap_board == "https://www.amap.com/ranking/beijing"
 
 
 def test_hotel_links_include_ctrip_city_and_search_word() -> None:
@@ -49,11 +50,17 @@ def test_hotel_links_include_ctrip_city_and_search_word() -> None:
     assert "hotel/list/list.html" in links.meituan
     assert "cityId=1" in links.meituan
     assert links.dianping is None
+    assert links.amap_board == "https://www.amap.com/ranking/beijing/hotel"
 
 
 def test_plain_city_strips_suffix() -> None:
     assert plain_city("北京市") == "北京"
     assert plain_city("上海市") == "上海"
+
+
+def test_amap_ranking_url_uses_city_slug() -> None:
+    assert amap_ranking_url("上海市", "food") == "https://www.amap.com/ranking/shanghai"
+    assert amap_ranking_url("北京", "shop") == "https://www.amap.com/ranking/beijing/shop"
 
 
 def test_couple_budget_stacks_per_person() -> None:

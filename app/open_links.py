@@ -1,6 +1,6 @@
 """外链生成模块。
 
-本文件按城市和品类生成高德、美团、携程、点评网页链接：酒店走美团酒店 H5 与携程 searchWord 列表，餐馆走美团到餐页。
+本文件按城市和品类生成高德、美团、携程、点评和扫街榜网页链接：酒店走美团酒店 H5 与携程 searchWord 列表，餐馆走美团到餐页。
 """
 
 from datetime import datetime, timedelta, timezone
@@ -134,6 +134,47 @@ DIANPING_CITY_IDS = {
     "太原": 26,
 }
 
+# 高德扫街榜网页城市路径，对应 www.amap.com/ranking/{slug}
+AMAP_RANKING_SLUGS = {
+    "北京": "beijing",
+    "上海": "shanghai",
+    "广州": "guangzhou",
+    "深圳": "shenzhen",
+    "杭州": "hangzhou",
+    "南京": "nanjing",
+    "成都": "chengdu",
+    "武汉": "wuhan",
+    "西安": "xian",
+    "重庆": "chongqing",
+    "天津": "tianjin",
+    "苏州": "suzhou",
+    "长沙": "changsha",
+    "郑州": "zhengzhou",
+    "青岛": "qingdao",
+    "厦门": "xiamen",
+    "宁波": "ningbo",
+    "无锡": "wuxi",
+    "合肥": "hefei",
+    "福州": "fuzhou",
+    "济南": "jinan",
+    "沈阳": "shenyang",
+    "大连": "dalian",
+    "昆明": "kunming",
+    "哈尔滨": "haerbin",
+    "长春": "changchun",
+    "石家庄": "shijiazhuang",
+    "南昌": "nanchang",
+    "南宁": "nanning",
+    "太原": "taiyuan",
+    "贵阳": "guiyang",
+    "海口": "haikou",
+    "兰州": "lanzhou",
+    "东莞": "dongguan",
+    "佛山": "foshan",
+    "珠海": "zhuhai",
+    "三亚": "sanya",
+}
+
 
 def build_open_links(
     *,
@@ -177,7 +218,21 @@ def build_open_links(
         meituan_app=f"imeituan://www.meituan.com/search?q={encoded_name}&ci={meituan_city_id}",
         ctrip=ctrip,
         dianping=dianping,
+        amap_board=amap_ranking_url(city_name, "hotel" if category == "hotel" else "food"),
     )
+
+
+def amap_ranking_url(city: str, kind: str = "food") -> str:
+    """生成高德扫街榜网页地址：美食状元榜、烟火小店或必住酒店。"""
+
+    slug = AMAP_RANKING_SLUGS.get(plain_city(city), "beijing")
+    if kind == "hotel":
+        return f"https://www.amap.com/ranking/{slug}/hotel"
+    if kind == "shop":
+        return f"https://www.amap.com/ranking/{slug}/shop"
+    if kind == "select":
+        return f"https://www.amap.com/ranking/{slug}/select-food"
+    return f"https://www.amap.com/ranking/{slug}"
 
 
 def plain_city(city: str) -> str:

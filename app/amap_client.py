@@ -201,7 +201,7 @@ class AmapClient:
         city: str,
         types: str = "050000",
     ) -> list[PoiRecord]:
-        """按关键词在指定城市搜 POI，供扫街榜必吃/烟火小店可视化。"""
+        """按关键词在指定城市搜 POI，供扫街榜状元/烟火小店/甄选可视化。"""
 
         try:
             payload = await self._get(

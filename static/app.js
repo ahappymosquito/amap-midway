@@ -1,4 +1,4 @@
-// 本文件实现多点选址交互：地点历史保存在浏览器本地、美团/携程外链、地铁末段出站骑行，以及合计前后两块路线明细。
+// 本文件实现多点选址交互：地点历史、扫街榜网页跳转与筛选、美团/携程外链、地铁末段出站骑行。
 const state = {
   map: null,
   originMarkers: [],
@@ -23,6 +23,7 @@ const state = {
   boardFilter: "all",
   pulseTimer: null,
   focusedOriginIndex: 0,
+  rankingUrl: "",
 };
 
 const elements = {
@@ -441,6 +442,7 @@ async function searchMeet() {
     state.activeRoutes = [];
     state.selectedPlanIndex = {};
     state.boardFilter = "all";
+    state.rankingUrl = result.amap_ranking_url || "";
     persistOriginDraft();
     persistLastForm();
     rememberOriginHistory((result.origins || []).map((item) => item.formatted_address));
@@ -564,6 +566,9 @@ function placePinKind(place) {
   if (place.board === "street") {
     return "street";
   }
+  if (place.board === "select") {
+    return "select";
+  }
   return "place";
 }
 
@@ -571,20 +576,28 @@ function renderBoardBar(category) {
   if (!elements.boardBar) {
     return;
   }
+  const ranking = state.rankingUrl || "https://www.amap.com/ranking/";
+  const rankingLink = `<a class="board-link" href="${escapeHtml(ranking)}" target="_blank" rel="noopener">在高德打开扫街榜</a>`;
+  if (category === "hotel") {
+    elements.boardBar.hidden = false;
+    elements.boardBar.innerHTML = rankingLink;
+    return;
+  }
   if (category !== "restaurant") {
     elements.boardBar.hidden = true;
     elements.boardBar.innerHTML = "";
     return;
   }
-  const city = encodeURIComponent(state.origins[0]?.city || "北京");
   const championCount = state.places.filter((item) => item.board === "champion").length;
   const streetCount = state.places.filter((item) => item.board === "street").length;
+  const selectCount = state.places.filter((item) => item.board === "select").length;
   elements.boardBar.hidden = false;
   elements.boardBar.innerHTML = `
     <button type="button" class="board-chip${state.boardFilter === "all" ? " active" : ""}" data-board="all">全部</button>
-    <button type="button" class="board-chip${state.boardFilter === "champion" ? " active" : ""}" data-board="champion">必吃榜 ${championCount}</button>
+    <button type="button" class="board-chip${state.boardFilter === "champion" ? " active" : ""}" data-board="champion">状元榜 ${championCount}</button>
     <button type="button" class="board-chip${state.boardFilter === "street" ? " active" : ""}" data-board="street">烟火小店 ${streetCount}</button>
-    <a class="board-link" href="https://uri.amap.com/search?keyword=${encodeURIComponent("扫街榜")}&city=${city}&view=map&src=amap_find&callnative=0" target="_blank" rel="noopener">在高德打开扫街榜</a>
+    <button type="button" class="board-chip${state.boardFilter === "select" ? " active" : ""}" data-board="select">极致甄选 ${selectCount}</button>
+    ${rankingLink}
   `;
 }
 
@@ -618,10 +631,12 @@ function placeItem(place, index) {
   const costLabel = "人均";
   const boardBadge =
     place.board === "champion"
-      ? `<span class="badge">必吃榜</span>`
+      ? `<span class="badge">状元榜</span>`
       : place.board === "street"
         ? `<span class="badge">烟火小店</span>`
-        : "";
+        : place.board === "select"
+          ? `<span class="badge">极致甄选</span>`
+          : "";
   const badge = place.over_budget
     ? `<span class="badge warn">超差标</span>`
     : place.budget_unknown
@@ -667,6 +682,9 @@ function renderOpenLinks(place) {
     ["在高德打开", amap],
     ["在美团看价", links.meituan],
   ];
+  if (links.amap_board) {
+    items.push(["在扫街榜看", links.amap_board]);
+  }
   if (place.category === "hotel" && links.ctrip) {
     items.push(["在携程看价", links.ctrip]);
   }

@@ -82,6 +82,7 @@ class OpenLinks(BaseModel):
     meituan_app: str
     ctrip: str | None = None
     dianping: str | None = None
+    amap_board: str | None = None
 
 
 class MetroStation(BaseModel):
@@ -183,6 +184,7 @@ class PlacesSearchResponse(BaseModel):
     places: list[Place]
     metro_stations: list[MetroStation] = Field(default_factory=list)
     metro_lines: list[MetroLine] = Field(default_factory=list)
+    amap_ranking_url: str = ""
 
 
 class TransitDurationResponse(BaseModel):

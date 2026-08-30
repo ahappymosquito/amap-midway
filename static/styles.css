@@ -275,6 +275,11 @@ input {
   border-color: var(--primary);
 }
 
+.board-chip[data-board="select"].active {
+  background: #7c3aed;
+  border-color: #7c3aed;
+}
+
 .map-legend {
   right: 16px;
   bottom: 16px;
@@ -771,6 +776,10 @@ button:disabled {
 
 .map-pin.street {
   background: #ea580c;
+}
+
+.map-pin.select {
+  background: #7c3aed;
 }
 
 .map-pin.over {

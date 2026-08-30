@@ -1,6 +1,6 @@
 """多点选址业务模块。
 
-本文件根据多个通勤点搜索中间区域的餐馆或酒店，按真实地铁时长排序，并为餐馆叠加热门必吃/烟火小店榜可视化；外链带推断城市。
+本文件根据多个通勤点搜索中间区域的餐馆或酒店，按真实地铁时长排序，并为餐馆叠加扫街榜状元/烟火小店/甄选可视化。
 """
 
 import asyncio
@@ -11,7 +11,7 @@ from app.amap_client import AmapClient
 from app.budget import couple_budget, is_over_budget
 from app.distance import centroid, haversine_distance_m, search_radius_from_points
 from app.metro import parse_all_transit_plans, parse_riding_payload, select_metro_stations, to_metro_station
-from app.open_links import build_open_links
+from app.open_links import amap_ranking_url, build_open_links
 from app.schemas import (
     CommuteTimes,
     LocationResponse,
@@ -27,8 +27,9 @@ from app.schemas import (
 TRANSIT_RANK_LIMIT = 8
 TRANSIT_CONCURRENCY = 6
 PREPLAN_COUNT = 3
-BOARD_CHAMPION_KEYWORD = "必吃榜"
+BOARD_CHAMPION_KEYWORD = "状元榜"
 BOARD_STREET_KEYWORD = "烟火小店"
+BOARD_SELECT_KEYWORD = "品质甄选"
 
 
 async def search_places_between(
@@ -51,14 +52,15 @@ async def search_places_between(
     radius = search_radius_from_points(coords)
     around_task = client.search_around_pois(mid_lng, mid_lat, radius, category)
     if category == "restaurant":
-        around, champion_records, street_records = await asyncio.gather(
+        around, champion_records, street_records, select_records = await asyncio.gather(
             around_task,
             client.search_text_pois(BOARD_CHAMPION_KEYWORD, city),
             client.search_text_pois(BOARD_STREET_KEYWORD, city),
+            client.search_text_pois(BOARD_SELECT_KEYWORD, city),
         )
     else:
         around = await around_task
-        champion_records, street_records = [], []
+        champion_records, street_records, select_records = [], [], []
     max_distance = int(radius * 1.3)
     champion_ids = {
         item.id
@@ -70,13 +72,18 @@ async def search_places_between(
         for item in street_records
         if haversine_distance_m(mid_lng, mid_lat, item.lng, item.lat) <= max_distance
     } - champion_ids
+    select_ids = {
+        item.id
+        for item in select_records
+        if haversine_distance_m(mid_lng, mid_lat, item.lng, item.lat) <= max_distance
+    } - champion_ids - street_ids
     records = [
         record
         for record in around
         if haversine_distance_m(mid_lng, mid_lat, record.lng, record.lat) <= max_distance
     ]
     seen_ids = {item.id for item in records}
-    for extra in [*champion_records, *street_records]:
+    for extra in [*champion_records, *street_records, *select_records]:
         if extra.id in seen_ids:
             continue
         if haversine_distance_m(mid_lng, mid_lat, extra.lng, extra.lat) > max_distance:
@@ -118,7 +125,7 @@ async def search_places_between(
                     poi_id=record.id,
                     city=city,
                 ),
-                board=_board_tag(record.id, champion_ids, street_ids),
+                board=_board_tag(record.id, champion_ids, street_ids, select_ids, record.tag),
             )
         )
 
@@ -137,6 +144,7 @@ async def search_places_between(
         places=places,
         metro_stations=metro_stations,
         metro_lines=[],
+        amap_ranking_url=amap_ranking_url(city, "hotel" if category == "hotel" else "food"),
     )
 
 
@@ -248,13 +256,22 @@ async def _metro_stations_between(
     return select_metro_stations(stations, points, center)
 
 
-def _board_tag(place_id: str, champion_ids: set[str], street_ids: set[str]) -> str | None:
-    """把高德必吃榜、烟火小店搜索命中标到候选店上。"""
+def _board_tag(
+    place_id: str,
+    champion_ids: set[str],
+    street_ids: set[str],
+    select_ids: set[str],
+    tag: str = "",
+) -> str | None:
+    """把扫街榜状元/烟火小店/甄选命中标到候选店上。"""
 
-    if place_id in champion_ids:
+    text = tag or ""
+    if place_id in champion_ids or "状元" in text or "必吃" in text:
         return "champion"
-    if place_id in street_ids:
+    if place_id in street_ids or "烟火" in text:
         return "street"
+    if place_id in select_ids or "甄选" in text:
+        return "select"
     return None
 
 
