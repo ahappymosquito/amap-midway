@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "amap-find"
+version = "0.1.6"
+description = "高德多点选址可视化 FastAPI 单页应用"
+authors = ["Codex <codex@example.com>"]
+readme = "README.md"
+packages = [{ include = "app" }]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<4.0"
+fastapi = "^0.136.3"
+uvicorn = { extras = ["standard"], version = "^0.48.0" }
+httpx = "^0.28.1"
+pydantic-settings = "^2.14.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^9.0.3"
+pytest-asyncio = "^1.4.0"
+respx = "^0.23.1"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

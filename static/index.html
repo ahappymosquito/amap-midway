@@ -1,0 +1,76 @@
+<!-- 本文件实现多点选址单页：根据地名推断城市、地铁站与途经站标注、路线方案在面板内展开明细。 -->
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>多点选址 · 餐馆酒店</title>
+    <link rel="stylesheet" href="/static/styles.css?v=016" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="map-area" aria-label="选址地图">
+        <div id="map" class="map"></div>
+        <div id="routePanel" class="route-times" hidden></div>
+        <div id="boardBar" class="board-bar" hidden></div>
+        <div id="mapLegend" class="map-legend" aria-hidden="true">
+          <span class="legend-item mode-riding">骑行</span>
+          <span class="legend-item mode-walk">步行换乘</span>
+        </div>
+        <div id="mapStatus" class="map-status" role="status">输入至少两个地点，在地图上选择餐馆或酒店</div>
+      </section>
+
+      <aside class="control-panel" aria-label="搜索控制面板">
+        <header class="panel-header">
+          <h1>多点选址</h1>
+          <p>按真实地铁时间比较中间的餐馆和酒店。城市由地点名自动推断。点选后只显示一种出行方案，途经地铁站会标在地图上。</p>
+        </header>
+
+        <form id="meetForm" class="search-form">
+          <div id="originsList" class="origins-list"></div>
+          <button id="addOriginButton" type="button">添加地点</button>
+
+          <fieldset>
+            <legend>找什么</legend>
+            <div class="choice-row two">
+              <label><input type="radio" name="category" value="restaurant" checked /> 餐馆</label>
+              <label><input type="radio" name="category" value="hotel" /> 酒店</label>
+            </div>
+          </fieldset>
+
+          <div class="coord-grid">
+            <label>
+              人数
+              <input id="peopleInput" type="number" min="1" max="8" step="1" value="2" />
+            </label>
+            <label id="budgetFieldLabel">
+              <span id="budgetLabelText">人均预算（元）</span>
+              <input id="budgetInput" type="number" min="50" max="5000" step="50" value="300" />
+            </label>
+          </div>
+          <p class="hint" id="budgetHint">按餐馆人均比较。无人均则请到美团/点评核价。</p>
+
+          <div class="actions single">
+            <button id="meetSearchButton" type="submit">搜索</button>
+          </div>
+        </form>
+
+        <div id="message" class="message" role="status"></div>
+
+        <section class="results-section" aria-label="搜索结果">
+          <div class="results-header">
+            <h2>推荐</h2>
+            <span id="resultCount">0 个</span>
+          </div>
+          <ol id="resultsList" class="results-list"></ol>
+          <details id="moreResults" class="more-results" hidden>
+            <summary id="moreResultsSummary">其余结果</summary>
+            <ol id="moreResultsList" class="results-list"></ol>
+          </details>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/static/app.js?v=016" defer></script>
+  </body>
+</html>

@@ -1,0 +1,71 @@
+# amap_find
+
+高德多点选址工具。输入两个或更多通勤地点后，页面在中间区域搜索餐馆或酒店，按真实地铁时间排序；地图高亮地铁线路和站点。点选后左上角浮窗列出多种路线，地图同一时间只显示一种出行方案。
+
+当前版本：`0.1.6`
+
+## 功能
+
+- FastAPI 后端托管 API 和静态单页。
+- 支持 2 到 6 个通勤点，按中心点周边搜索餐馆或酒店。
+- 预算文案随选项切换：餐馆显示人均预算，酒店显示人均差标和人数合计。
+- 餐馆可用高德「必吃榜」「烟火小店」关键词结果做可视化筛选，并跳转高德扫街榜。
+- 优先按真实地铁时长排序，而不是直线距离。
+- 搜索时为前 3 名推荐预规划多种地铁方案和骑行方案。
+- 搜索后只标注地铁站图标和站名；选中方案后标出途经站。
+- 点选后地图只画地铁或骑行其中一种；路线带描边和低频闪烁。左侧方案下方展开地铁/走路/换乘明细。
+- 城市由第一个地点名自动推断，无需再填城市。
+- 列表先展示最推荐的 3 家，其余折叠。
+- 桌面端打开网页版美团/携程/高德；移动端高德可唤起 App。
+
+## 环境变量
+
+```powershell
+$env:AMAP_WEB_KEY="你的高德 Web 服务和 JS API Key"
+```
+
+也可以在项目根目录创建 `.env`：
+
+```text
+AMAP_WEB_KEY=你的高德 Web 服务和 JS API Key
+```
+
+如果页面地图加载失败并出现 `USERKEY_PLAT_NOMATCH`，需要在高德控制台把 `amap.qrqto.club` 和本地 `127.0.0.1` 加入 JS API 域名白名单。
+
+## 安装与启动
+
+```powershell
+poetry install
+poetry run uvicorn app.main:app --reload
+```
+
+- 本地：<http://127.0.0.1:8000/>
+- 线上：<https://amap.qrqto.club/>
+
+服务跑在 `ts3_qrqto` 的 `/home/ts3/amap_find`，由 systemd 服务 `amap-find` 监听 `127.0.0.1:8010`，Nginx 反代 `amap.qrqto.club`。
+
+## API
+
+- `GET /api/config`
+- `GET /api/geocode?address=北控水务大厦&city=北京`
+- `POST /api/places/search`
+  - `origins`：至少两个地点
+  - `category`：`restaurant` 或 `hotel`
+  - `people_count`：人数
+  - `budget_per_person`：单人差标
+- `GET /api/places/transit`：单段地铁时长
+- `GET /api/places/route`：多种地铁方案和骑行折线，前端规划失败时回退使用
+
+## 测试
+
+```powershell
+poetry run pytest
+```
+
+## 当前限制
+
+- 酒店实时房价、空房和团购价不在本站内展示，需跳转美团/携程/高德。
+- 地铁排序只对中心附近最优的一批候选调用高德公交接口，以控制配额。
+- 地图上的地铁站是通勤点范围内的参考标注；途经站来自当前选中的出行方案。
+- 扫街榜没有官方开放接口，本站用高德关键词「必吃榜」「烟火小店」召回做可视化筛选，完整榜单请到高德查看。
+- 高德返回结果依赖 Key 权限、配额和 POI 数据质量。
