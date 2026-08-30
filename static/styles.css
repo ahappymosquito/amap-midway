@@ -1,4 +1,4 @@
-/* 本文件实现多点选址布局、扫街榜筛选、路线描边闪烁，以及合计前后两块出行明细样式。 */
+/* 本文件实现多点选址布局、地点历史、扫街榜筛选、路线描边闪烁，以及合计前后两块出行明细样式。 */
 :root {
   --bg: #eef2f6;
   --panel: #ffffff;
@@ -440,6 +440,51 @@ input {
 .remove-origin {
   min-height: 44px;
   padding: 0 12px;
+  white-space: nowrap;
+}
+
+.origin-history {
+  display: grid;
+  gap: 8px;
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.history-clear {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.history-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.history-chip {
+  max-width: 100%;
+  min-height: 32px;
+  padding: 4px 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

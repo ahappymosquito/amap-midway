@@ -1,4 +1,4 @@
-// 本文件实现多点选址交互：根据地名推断城市、美团/携程外链、地铁方案末段出站骑行，以及合计前后两块路线明细。
+// 本文件实现多点选址交互：地点历史保存在浏览器本地、美团/携程外链、地铁末段出站骑行，以及合计前后两块路线明细。
 const state = {
   map: null,
   originMarkers: [],
@@ -22,6 +22,7 @@ const state = {
   activeRoutes: [],
   boardFilter: "all",
   pulseTimer: null,
+  focusedOriginIndex: 0,
 };
 
 const elements = {
@@ -43,6 +44,8 @@ const elements = {
   moreResults: document.querySelector("#moreResults"),
   moreResultsSummary: document.querySelector("#moreResultsSummary"),
   moreResultsList: document.querySelector("#moreResultsList"),
+  originHistory: document.querySelector("#originHistory"),
+  originHistoryBar: document.querySelector("#originHistoryBar"),
 };
 
 const ORIGIN_COLORS = ["#0f766e", "#c2410c", "#7c3aed", "#0369a1", "#b45309", "#be185d"];
@@ -54,6 +57,10 @@ const LAST_MILE_WALK_MAX_M = 400;
 const LAST_MILE_WALK_MAX_S = 240;
 const RIDING_SPEED_MPS = 3.5;
 const WALK_SPEED_MPS = 1.25;
+const ORIGIN_LAST_KEY = "amap_find.last_origins";
+const ORIGIN_HISTORY_KEY = "amap_find.origin_history";
+const LAST_FORM_KEY = "amap_find.last_form";
+const ORIGIN_HISTORY_LIMIT = 24;
 const BUS_COLOR = "#0f766e";
 const METRO_LINE_COLORS = {
   "1号线": "#c23a30",
@@ -91,9 +98,11 @@ const LINE_NAME_RE =
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
+  restoreLastForm();
   renderOriginInputs();
   bindControls();
   updateBudgetHint();
+  renderOriginHistory();
   try {
     const config = await fetchJson("/api/config");
     if (!config.amap_key_configured || !config.amap_js_key) {
@@ -115,12 +124,36 @@ function bindControls() {
     }
     state.originCount += 1;
     renderOriginInputs();
+    persistOriginDraft();
   });
-  elements.peopleInput.addEventListener("input", updateBudgetHint);
-  elements.budgetInput.addEventListener("input", updateBudgetHint);
+  elements.peopleInput.addEventListener("input", () => {
+    updateBudgetHint();
+    persistLastForm();
+  });
+  elements.budgetInput.addEventListener("input", () => {
+    updateBudgetHint();
+    persistLastForm();
+  });
   document.querySelectorAll('input[name="category"]').forEach((input) => {
-    input.addEventListener("change", updateBudgetHint);
+    input.addEventListener("change", () => {
+      updateBudgetHint();
+      persistLastForm();
+    });
   });
+  if (elements.originHistoryBar) {
+    elements.originHistoryBar.addEventListener("click", (event) => {
+      const clearButton = event.target.closest("[data-clear-history]");
+      if (clearButton) {
+        writeStorage(ORIGIN_HISTORY_KEY, []);
+        renderOriginHistory();
+        return;
+      }
+      const chip = event.target.closest("[data-history-place]");
+      if (chip) {
+        fillOriginFromHistory(chip.dataset.historyPlace);
+      }
+    });
+  }
   elements.meetForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     await searchMeet();
@@ -164,6 +197,10 @@ function bindControls() {
 
 function renderOriginInputs() {
   const previous = [...elements.originsList.querySelectorAll("input")].map((input) => input.value);
+  const restored = previous.some(Boolean) ? previous : loadLastOrigins();
+  if (!previous.length && restored.length >= 2) {
+    state.originCount = Math.min(MAX_ORIGINS, Math.max(2, restored.length));
+  }
   elements.originsList.innerHTML = "";
   for (let index = 0; index < state.originCount; index += 1) {
     const label = document.createElement("label");
@@ -171,12 +208,20 @@ function renderOriginInputs() {
     label.innerHTML = `
       地点 ${letter}
       <span class="origin-row">
-        <input type="text" data-origin-index="${index}" autocomplete="street-address" placeholder="输入地点 ${letter}" />
+        <input type="text" name="origin-${letter}" data-origin-index="${index}" list="originHistory" autocomplete="on" placeholder="输入地点 ${letter}" />
         ${index >= 2 ? `<button type="button" class="remove-origin" data-remove-index="${index}">删除</button>` : ""}
       </span>
     `;
     const input = label.querySelector("input");
-    input.value = previous[index] || "";
+    input.value = restored[index] || "";
+    input.addEventListener("input", persistOriginDraft);
+    input.addEventListener("change", () => {
+      persistOriginDraft();
+      rememberOriginHistory();
+    });
+    input.addEventListener("focus", () => {
+      state.focusedOriginIndex = index;
+    });
     elements.originsList.appendChild(label);
   }
   elements.originsList.querySelectorAll("[data-remove-index]").forEach((button) => {
@@ -189,9 +234,136 @@ function renderOriginInputs() {
       [...elements.originsList.querySelectorAll("input")].forEach((input, inputIndex) => {
         input.value = values[inputIndex] || "";
       });
+      persistOriginDraft();
     });
   });
   elements.addOriginButton.disabled = state.originCount >= MAX_ORIGINS;
+}
+
+function persistOriginDraft() {
+  const values = collectOriginValues();
+  writeStorage(ORIGIN_LAST_KEY, values);
+}
+
+function persistLastForm() {
+  writeStorage(LAST_FORM_KEY, {
+    category: getCategory(),
+    people: Number(elements.peopleInput.value) || 2,
+    budget: Number(elements.budgetInput.value) || 300,
+  });
+}
+
+function restoreLastForm() {
+  const form = readStorage(LAST_FORM_KEY, null);
+  if (!form || typeof form !== "object") {
+    return;
+  }
+  if (form.people) {
+    elements.peopleInput.value = String(form.people);
+  }
+  if (form.budget) {
+    elements.budgetInput.value = String(form.budget);
+  }
+  if (form.category === "hotel" || form.category === "restaurant") {
+    const radio = document.querySelector(`input[name="category"][value="${form.category}"]`);
+    if (radio) {
+      radio.checked = true;
+    }
+  }
+}
+
+function collectOriginValues() {
+  return [...elements.originsList.querySelectorAll("input")].map((input) => input.value.trim()).filter(Boolean);
+}
+
+function loadLastOrigins() {
+  const saved = readStorage(ORIGIN_LAST_KEY, []);
+  return Array.isArray(saved) ? saved.map((item) => String(item || "").trim()).filter(Boolean) : [];
+}
+
+function rememberOriginHistory(extraNames) {
+  const current = loadOriginHistory();
+  const incoming = [...collectOriginValues(), ...(extraNames || [])]
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  const merged = [];
+  for (const name of [...incoming, ...current]) {
+    if (!merged.some((item) => item === name)) {
+      merged.push(name);
+    }
+  }
+  writeStorage(ORIGIN_HISTORY_KEY, merged.slice(0, ORIGIN_HISTORY_LIMIT));
+  renderOriginHistory();
+}
+
+function loadOriginHistory() {
+  const saved = readStorage(ORIGIN_HISTORY_KEY, []);
+  return Array.isArray(saved) ? saved.map((item) => String(item || "").trim()).filter(Boolean) : [];
+}
+
+function renderOriginHistory() {
+  const history = loadOriginHistory();
+  if (elements.originHistory) {
+    elements.originHistory.innerHTML = history
+      .map((name) => `<option value="${escapeHtml(name)}"></option>`)
+      .join("");
+  }
+  if (!elements.originHistoryBar) {
+    return;
+  }
+  if (!history.length) {
+    elements.originHistoryBar.hidden = true;
+    elements.originHistoryBar.innerHTML = "";
+    return;
+  }
+  const chips = history
+    .slice(0, 12)
+    .map(
+      (name) =>
+        `<button type="button" class="history-chip" data-history-place="${escapeHtml(name)}">${escapeHtml(name)}</button>`,
+    )
+    .join("");
+  elements.originHistoryBar.hidden = false;
+  elements.originHistoryBar.innerHTML = `
+    <div class="history-head">
+      <span>最近用过</span>
+      <button type="button" class="history-clear" data-clear-history>清除</button>
+    </div>
+    <div class="history-chips">${chips}</div>
+  `;
+}
+
+function fillOriginFromHistory(name) {
+  const inputs = [...elements.originsList.querySelectorAll("input")];
+  if (!inputs.length || !name) {
+    return;
+  }
+  const empty = inputs.find((input) => !input.value.trim());
+  const focused =
+    Number.isInteger(state.focusedOriginIndex) && inputs[state.focusedOriginIndex]
+      ? inputs[state.focusedOriginIndex]
+      : null;
+  const target = empty || focused || inputs[0];
+  target.value = name;
+  persistOriginDraft();
+  target.focus();
+}
+
+function readStorage(key, fallback) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    /* 隐私模式或配额满时忽略 */
+  }
 }
 
 function updateBudgetHint() {
@@ -269,6 +441,9 @@ async function searchMeet() {
     state.activeRoutes = [];
     state.selectedPlanIndex = {};
     state.boardFilter = "all";
+    persistOriginDraft();
+    persistLastForm();
+    rememberOriginHistory((result.origins || []).map((item) => item.formatted_address));
     cacheRecommendedRoutes(result.places.slice(0, RECOMMEND_COUNT));
     drawOrigins(result.radius_m);
     drawMetroNetwork();
