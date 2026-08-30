@@ -112,7 +112,7 @@ class RouteSegment(BaseModel):
 
 
 class RouteLeg(BaseModel):
-    """出行方案中的一段说明，供悬停明细表使用。"""
+    """出行方案中的一段说明，供路线明细表使用。"""
 
     label: str
     mode: str
@@ -120,7 +120,7 @@ class RouteLeg(BaseModel):
 
 
 class TransitPlan(BaseModel):
-    """一条公交/地铁出行方案。"""
+    """一条公交/地铁出行方案，末段默认为出站骑行，特别近才走路。"""
 
     duration_s: int | None = None
     summary: str = ""
@@ -128,6 +128,8 @@ class TransitPlan(BaseModel):
     metro_s: int | None = None
     transfer_s: int | None = None
     transfer_count: int = 0
+    lastmile_s: int | None = None
+    lastmile_mode: str = ""
     legs: list[RouteLeg] = Field(default_factory=list)
     segments: list[RouteSegment] = Field(default_factory=list)
 

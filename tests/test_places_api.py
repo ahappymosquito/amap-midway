@@ -159,6 +159,9 @@ def test_places_search_returns_ranked_candidates(client: TestClient) -> None:
     assert hotel["over_budget"] is True
     assert hotel["commutes"][0]["transit_s"] == 1500
     assert hotel["open_links"]["ctrip"]
+    assert "cityId=" in hotel["open_links"]["ctrip"]
+    assert "searchWord=" in hotel["open_links"]["ctrip"]
+    assert "hotel/list/list.html" in hotel["open_links"]["meituan"]
     assert "callnative=0" in hotel["open_links"]["amap"]
     assert payload["metro_stations"][0]["name"] == "知春路"
     assert payload["metro_stations"][0]["lines"] == ["10号线", "13号线"]

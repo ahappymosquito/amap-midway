@@ -1,4 +1,4 @@
-/* 本文件实现多点选址布局、扫街榜筛选、路线描边闪烁和出行明细表样式。 */
+/* 本文件实现多点选址布局、扫街榜筛选、路线描边闪烁，以及合计前后两块出行明细样式。 */
 :root {
   --bg: #eef2f6;
   --panel: #ffffff;
@@ -174,10 +174,30 @@ input {
 }
 
 .scheme-detail {
+  display: grid;
+  gap: 6px;
+}
+
+.detail-block {
   padding: 8px 10px;
   border: 1px dashed var(--border);
   border-radius: 8px;
   background: #f8fafc;
+}
+
+.detail-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #115e59;
+  font-size: 13px;
+}
+
+.detail-total strong {
+  font-variant-numeric: tabular-nums;
 }
 
 .route-detail-table {

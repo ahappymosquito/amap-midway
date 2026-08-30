@@ -171,7 +171,7 @@ def test_parse_bus_line_payload() -> None:
 def test_fill_plan_stats_splits_walk_metro_transfer() -> None:
     from app.schemas import RoutePoint, RouteSegment, TransitPlan
 
-    path = [RoutePoint(lng=1, lat=1), RoutePoint(lng=2, lat=2)]
+    path = [RoutePoint(lng=116.4500, lat=39.9700), RoutePoint(lng=116.4502, lat=39.9700)]
     plan = fill_plan_stats(
         TransitPlan(
             duration_s=1500,
@@ -190,7 +190,35 @@ def test_fill_plan_stats_splits_walk_metro_transfer() -> None:
     assert plan.metro_s == 1080
     assert plan.transfer_s == 120
     assert plan.transfer_count == 1
+    assert plan.lastmile_mode == "WALK"
+    assert plan.lastmile_s == 120
     assert [item.label for item in plan.legs] == ["步行到站", "10号线", "换乘步行", "13号线", "步行到店"]
+
+
+def test_fill_plan_stats_converts_far_last_mile_to_riding() -> None:
+    from app.schemas import RoutePoint, RouteSegment, TransitPlan
+
+    short = [RoutePoint(lng=116.4500, lat=39.9700), RoutePoint(lng=116.4502, lat=39.9700)]
+    far = [RoutePoint(lng=116.4500, lat=39.9700), RoutePoint(lng=116.4590, lat=39.9700)]
+    plan = fill_plan_stats(
+        TransitPlan(
+            duration_s=1980,
+            summary="10号线",
+            segments=[
+                RouteSegment(mode="WALK", duration_s=180, path=short),
+                RouteSegment(mode="SUBWAY", line="10号线", duration_s=1200, path=short),
+                RouteSegment(mode="WALK", duration_s=600, path=far),
+            ],
+        )
+    )
+
+    assert plan.lastmile_mode == "RIDING"
+    assert plan.legs[-1].label == "骑行到店"
+    assert plan.legs[-1].mode == "RIDING"
+    assert plan.segments[-1].mode == "RIDING"
+    assert plan.walking_s == 180
+    assert plan.lastmile_s is not None and plan.lastmile_s < 600
+    assert plan.duration_s is not None and plan.duration_s < 1980
 
 
 def test_plan_summary_skips_walk() -> None:

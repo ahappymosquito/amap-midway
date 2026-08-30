@@ -1,11 +1,11 @@
-<!-- 本文件实现多点选址单页：根据地名推断城市、地铁站与途经站标注、路线方案在面板内展开明细。 -->
+<!-- 本文件实现多点选址单页：根据地名推断城市、地铁站与途经站标注、出站骑行明细在合计前后分两块展开。 -->
 <!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>多点选址 · 餐馆酒店</title>
-    <link rel="stylesheet" href="/static/styles.css?v=016" />
+    <link rel="stylesheet" href="/static/styles.css?v=017" />
   </head>
   <body>
     <main class="app-shell">
@@ -14,7 +14,7 @@
         <div id="routePanel" class="route-times" hidden></div>
         <div id="boardBar" class="board-bar" hidden></div>
         <div id="mapLegend" class="map-legend" aria-hidden="true">
-          <span class="legend-item mode-riding">骑行</span>
+          <span class="legend-item mode-riding">出站骑行</span>
           <span class="legend-item mode-walk">步行换乘</span>
         </div>
         <div id="mapStatus" class="map-status" role="status">输入至少两个地点，在地图上选择餐馆或酒店</div>
@@ -23,7 +23,7 @@
       <aside class="control-panel" aria-label="搜索控制面板">
         <header class="panel-header">
           <h1>多点选址</h1>
-          <p>按真实地铁时间比较中间的餐馆和酒店。城市由地点名自动推断。点选后只显示一种出行方案，途经地铁站会标在地图上。</p>
+          <p>按真实地铁时间比较中间的餐馆和酒店。城市由地点名自动推断。点选后只显示一种出行方案；下地铁后默认骑行到店，特别近才走路。</p>
         </header>
 
         <form id="meetForm" class="search-form">
@@ -71,6 +71,6 @@
       </aside>
     </main>
 
-    <script src="/static/app.js?v=016" defer></script>
+    <script src="/static/app.js?v=017" defer></script>
   </body>
 </html>

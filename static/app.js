@@ -1,4 +1,4 @@
-// 本文件实现多点选址交互：根据地名推断城市、地铁站与途经站标注，以及面板内展开路线明细。
+// 本文件实现多点选址交互：根据地名推断城市、美团/携程外链、地铁方案末段出站骑行，以及合计前后两块路线明细。
 const state = {
   map: null,
   originMarkers: [],
@@ -50,6 +50,10 @@ const RECOMMEND_COUNT = 3;
 const MAX_ORIGINS = 6;
 const WALK_COLOR = "#94a3b8";
 const RIDING_COLOR = "#15803d";
+const LAST_MILE_WALK_MAX_M = 400;
+const LAST_MILE_WALK_MAX_S = 240;
+const RIDING_SPEED_MPS = 3.5;
+const WALK_SPEED_MPS = 1.25;
 const BUS_COLOR = "#0f766e";
 const METRO_LINE_COLORS = {
   "1号线": "#c23a30",
@@ -630,7 +634,13 @@ function buildTransitOverlays(plan) {
     }
     const mode = String(segment.mode || "").toUpperCase();
     const subway = isSubwayMode(mode);
-    const color = subway ? lineColor(segment.line) : mode === "WALK" ? WALK_COLOR : BUS_COLOR;
+    const color = subway
+      ? lineColor(segment.line)
+      : mode === "RIDING"
+        ? RIDING_COLOR
+        : mode === "WALK"
+          ? WALK_COLOR
+          : BUS_COLOR;
     overlays.push(glowPolyline(path, subway ? 16 : 12, subway ? 58 : 52));
     overlays.push(
       new AMap.Polyline({
@@ -914,6 +924,8 @@ function normalizeTransitPlans(plans) {
       metro_s: plan.metro_s,
       transfer_s: plan.transfer_s,
       transfer_count: plan.transfer_count || 0,
+      lastmile_s: plan.lastmile_s,
+      lastmile_mode: plan.lastmile_mode || "",
       legs: plan.legs || [],
       segments: backendSegments(plan.segments),
     }),
@@ -1060,67 +1072,188 @@ function fillDetailSlot(originIndex, html) {
 }
 
 function ridingDetailHtml(seconds) {
-  return `<table class="route-detail-table"><caption>骑行方案</caption><tr><th>骑行</th><td>${formatDuration(seconds)}</td></tr></table>`;
+  return `<div class="detail-block"><table class="route-detail-table"><caption>全程骑行</caption><tr><th>骑行</th><td>${formatDuration(seconds)}</td></tr></table></div>`;
 }
 
 function planDetailHtml(plan) {
+  const lastmileLabel = plan.lastmile_mode === "RIDING" ? "骑行" : "走路";
+  const lastmileValue = plan.lastmile_mode === "RIDING" ? plan.lastmile_s : plan.walking_s;
   const legs = (plan.legs || [])
     .map((leg) => `<tr><th>${escapeHtml(leg.label)}</th><td>${formatDuration(leg.duration_s)}</td></tr>`)
     .join("");
   return `
-    <table class="route-detail-table">
-      <caption>${escapeHtml(plan.summary || "出行方案")}</caption>
-      <tr><th>地铁</th><td>${formatDuration(plan.metro_s)}</td></tr>
-      <tr><th>走路</th><td>${formatDuration(plan.walking_s)}</td></tr>
-      <tr><th>换乘</th><td>${formatDuration(plan.transfer_s)}${plan.transfer_count ? `（${plan.transfer_count} 次）` : ""}</td></tr>
-      <tr><th>合计</th><td>${formatDuration(plan.duration_s)}</td></tr>
-      ${legs}
-    </table>
+    <div class="detail-block">
+      <table class="route-detail-table">
+        <caption>${escapeHtml(plan.summary || "出行方案")}</caption>
+        <tr><th>地铁</th><td>${formatDuration(plan.metro_s)}</td></tr>
+        <tr><th>${lastmileLabel}</th><td>${formatDuration(lastmileValue)}</td></tr>
+        <tr><th>换乘</th><td>${formatDuration(plan.transfer_s)}${plan.transfer_count ? `（${plan.transfer_count} 次）` : ""}</td></tr>
+      </table>
+    </div>
+    <div class="detail-total"><span>合计</span><strong>${formatDuration(plan.duration_s)}</strong></div>
+    <div class="detail-block">
+      <table class="route-detail-table">
+        ${legs || `<tr><th>分段</th><td>暂无</td></tr>`}
+      </table>
+    </div>
   `;
 }
 
 function fillPlanStats(plan) {
-  if (plan.legs?.length) {
+  if (!plan.legs?.length) {
+    const segments = plan.segments || [];
+    let walking = 0;
+    let metro = 0;
+    let transfer = 0;
+    let transferCount = 0;
+    const legs = [];
+    segments.forEach((segment, index) => {
+      const mode = String(segment.mode || "").toUpperCase();
+      const duration = Number(segment.duration_s);
+      const amount = Number.isFinite(duration) ? duration : 0;
+      if (mode === "WALK") {
+        walking += amount;
+        const prevRide = segments.slice(0, index).some((item) => isTransitMode(item.mode));
+        const nextRide = segments.slice(index + 1).some((item) => isTransitMode(item.mode));
+        let label = "步行";
+        if (prevRide && nextRide) {
+          transfer += amount;
+          transferCount += 1;
+          label = "换乘步行";
+        } else if (!prevRide) {
+          label = "步行到站";
+        } else {
+          label = "步行到店";
+        }
+        legs.push({ label, mode: "WALK", duration_s: Number.isFinite(duration) ? duration : null });
+      } else if (mode === "RIDING") {
+        legs.push({
+          label: segment.line || "骑行到店",
+          mode: "RIDING",
+          duration_s: Number.isFinite(duration) ? duration : null,
+        });
+      } else if (isSubwayMode(mode)) {
+        metro += amount;
+        legs.push({ label: segment.line || "地铁", mode: "SUBWAY", duration_s: Number.isFinite(duration) ? duration : null });
+      } else {
+        legs.push({ label: segment.line || (mode === "BUS" ? "公交" : mode), mode, duration_s: Number.isFinite(duration) ? duration : null });
+      }
+    });
+    plan.walking_s = walking || plan.walking_s || null;
+    plan.metro_s = metro || plan.metro_s || null;
+    plan.transfer_s = transfer || plan.transfer_s || null;
+    plan.transfer_count = transferCount;
+    plan.legs = legs;
+  }
+  return applyLastMile(plan);
+}
+
+function applyLastMile(plan) {
+  if (plan.lastmile_mode === "RIDING" || plan.lastmile_mode === "WALK") {
     return plan;
   }
   const segments = plan.segments || [];
-  let walking = 0;
-  let metro = 0;
-  let transfer = 0;
-  let transferCount = 0;
-  const legs = [];
+  const lastIndex = lastMileWalkIndex(segments);
+  if (lastIndex == null) {
+    const lastRide = [...segments].reverse().find((item) => String(item.mode || "").toUpperCase() === "RIDING");
+    if (lastRide) {
+      plan.lastmile_mode = "RIDING";
+      plan.lastmile_s = lastRide.duration_s ?? null;
+    }
+    return plan;
+  }
+  const segment = segments[lastIndex];
+  const walkS = Number(segment.duration_s) || 0;
+  const distanceM = pathLengthM(segment.path);
+  if (isShortLastMile(walkS, distanceM)) {
+    plan.lastmile_mode = "WALK";
+    plan.lastmile_s = walkS || null;
+    return plan;
+  }
+  const rideS = estimateRideSeconds(walkS, distanceM);
+  if (Number.isFinite(Number(plan.duration_s))) {
+    plan.duration_s = Math.max(0, Number(plan.duration_s) - walkS + rideS);
+  }
+  const remainingWalk = Math.max(0, (Number(plan.walking_s) || 0) - walkS);
+  plan.walking_s = remainingWalk || null;
+  plan.lastmile_mode = "RIDING";
+  plan.lastmile_s = rideS;
+  segment.mode = "RIDING";
+  segment.duration_s = rideS;
+  if (plan.legs?.[lastIndex]) {
+    plan.legs[lastIndex] = { label: "骑行到店", mode: "RIDING", duration_s: rideS };
+  }
+  return plan;
+}
+
+function lastMileWalkIndex(segments) {
+  let lastIndex = null;
   segments.forEach((segment, index) => {
-    const mode = String(segment.mode || "").toUpperCase();
-    const duration = Number(segment.duration_s);
-    const amount = Number.isFinite(duration) ? duration : 0;
-    if (mode === "WALK") {
-      walking += amount;
-      const prevRide = segments.slice(0, index).some((item) => String(item.mode || "").toUpperCase() !== "WALK");
-      const nextRide = segments.slice(index + 1).some((item) => String(item.mode || "").toUpperCase() !== "WALK");
-      let label = "步行";
-      if (prevRide && nextRide) {
-        transfer += amount;
-        transferCount += 1;
-        label = "换乘步行";
-      } else if (!prevRide) {
-        label = "步行到站";
-      } else {
-        label = "步行到店";
-      }
-      legs.push({ label, mode: "WALK", duration_s: Number.isFinite(duration) ? duration : null });
-    } else if (isSubwayMode(mode)) {
-      metro += amount;
-      legs.push({ label: segment.line || "地铁", mode: "SUBWAY", duration_s: Number.isFinite(duration) ? duration : null });
-    } else {
-      legs.push({ label: segment.line || (mode === "BUS" ? "公交" : mode), mode, duration_s: Number.isFinite(duration) ? duration : null });
+    if (String(segment.mode || "").toUpperCase() !== "WALK") {
+      return;
+    }
+    const prevTransit = segments.slice(0, index).some((item) => isTransitMode(item.mode));
+    const nextTransit = segments.slice(index + 1).some((item) => isTransitMode(item.mode));
+    if (prevTransit && !nextTransit) {
+      lastIndex = index;
     }
   });
-  plan.walking_s = walking || plan.walking_s || null;
-  plan.metro_s = metro || plan.metro_s || null;
-  plan.transfer_s = transfer || plan.transfer_s || null;
-  plan.transfer_count = transferCount;
-  plan.legs = legs;
-  return plan;
+  return lastIndex;
+}
+
+function isShortLastMile(walkS, distanceM) {
+  if (distanceM > 0) {
+    return distanceM <= LAST_MILE_WALK_MAX_M;
+  }
+  return walkS <= LAST_MILE_WALK_MAX_S;
+}
+
+function estimateRideSeconds(walkS, distanceM) {
+  if (distanceM > 0) {
+    return Math.max(20, Math.round(distanceM / RIDING_SPEED_MPS));
+  }
+  if (walkS > 0) {
+    return Math.max(20, Math.round((walkS * WALK_SPEED_MPS) / RIDING_SPEED_MPS));
+  }
+  return 20;
+}
+
+function pathLengthM(path) {
+  let total = 0;
+  for (let index = 1; index < (path || []).length; index += 1) {
+    const prev = pointLngLat(path[index - 1]);
+    const curr = pointLngLat(path[index]);
+    if (prev && curr) {
+      total += haversineM(prev[0], prev[1], curr[0], curr[1]);
+    }
+  }
+  return total;
+}
+
+function pointLngLat(point) {
+  if (Array.isArray(point) && point.length >= 2) {
+    const lng = Number(point[0]);
+    const lat = Number(point[1]);
+    return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : null;
+  }
+  const lng = Number(point?.lng);
+  const lat = Number(point?.lat);
+  return Number.isFinite(lng) && Number.isFinite(lat) ? [lng, lat] : null;
+}
+
+function haversineM(lng1, lat1, lng2, lat2) {
+  const toRad = (value) => (value * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371008.8 * Math.asin(Math.sqrt(a));
+}
+
+function isTransitMode(mode) {
+  const value = String(mode || "").toUpperCase();
+  return value !== "" && value !== "WALK" && value !== "RIDING";
 }
 
 function renderLegend(lineNames) {
@@ -1141,8 +1274,10 @@ function renderLegend(lineNames) {
     .join("");
   const modeItem =
     state.selectedPlaceId && state.travelMode === "riding"
-      ? `<span class="legend-item mode-riding">当前：骑行</span>`
-      : `<span class="legend-item mode-walk">步行换乘</span>`;
+      ? `<span class="legend-item mode-riding">当前：全程骑行</span>`
+      : selectedPlansHaveLastRide()
+        ? `<span class="legend-item mode-riding">出站骑行</span>`
+        : `<span class="legend-item mode-walk">步行换乘</span>`;
   elements.mapLegend.innerHTML = `${modeItem}${lineItems}`;
 }
 
@@ -1241,6 +1376,13 @@ function lineColor(name) {
   }
   const hues = [12, 32, 48, 162, 188, 208, 258, 312];
   return `hsl(${hues[hash % hues.length]} 68% 38%)`;
+}
+
+function selectedPlansHaveLastRide() {
+  return state.activeRoutes.some((route, originIndex) => {
+    const plan = selectedTransitPlan(route, originIndex);
+    return plan?.lastmile_mode === "RIDING";
+  });
 }
 
 function isSubwayMode(mode) {

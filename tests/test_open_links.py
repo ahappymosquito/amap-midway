@@ -1,30 +1,59 @@
 """外链与差标测试。
 
-本文件验证高德/美团/携程/点评跳转链接生成，以及一人 300、两人 600 的差标判断。
+本文件验证高德/美团/携程/点评跳转链接生成（含城市参数），以及一人 300、两人 600 的差标判断。
 """
+
+import re
 
 from app.budget import couple_budget, is_over_budget
 from app.distance import centroid, midpoint, search_radius_from_points, search_radius_m
-from app.open_links import build_open_links
+from app.open_links import build_open_links, plain_city
 
 
 def test_restaurant_links_include_meituan_and_dianping() -> None:
-    links = build_open_links(name="海底捞", lng=116.45, lat=39.97, category="restaurant", poi_id="B000A96NAA")
+    links = build_open_links(
+        name="海底捞",
+        lng=116.45,
+        lat=39.97,
+        category="restaurant",
+        poi_id="B000A96NAA",
+        city="北京市",
+    )
 
     assert "uri.amap.com/marker" in links.amap
     assert "callnative=0" in links.amap
     assert "B000A96NAA" in links.amap_app
-    assert "meituan.com" in links.meituan
+    assert "meishi.meituan.com" in links.meituan
+    assert "ci=1" in links.meituan
     assert links.dianping is not None
+    assert "/keyword/2/10_" in links.dianping
     assert links.ctrip is None
 
 
-def test_hotel_links_include_ctrip() -> None:
-    links = build_open_links(name="桔子酒店", lng=116.43, lat=39.98, category="hotel", poi_id="B0M6OSLL15")
+def test_hotel_links_include_ctrip_city_and_search_word() -> None:
+    links = build_open_links(
+        name="德全奢品酒店",
+        lng=116.43,
+        lat=39.98,
+        category="hotel",
+        poi_id="B0M6OSLL15",
+        city="北京市",
+    )
 
     assert links.ctrip is not None
-    assert "ctrip.com" in links.ctrip
+    assert "hotels.ctrip.com/hotels/list" in links.ctrip
+    assert "cityId=1" in links.ctrip
+    assert "searchWord=" in links.ctrip
+    assert "cityName=" in links.ctrip
+    assert re.search(r"checkin=\d{4}-\d{2}-\d{2}", links.ctrip)
+    assert "hotel/list/list.html" in links.meituan
+    assert "cityId=1" in links.meituan
     assert links.dianping is None
+
+
+def test_plain_city_strips_suffix() -> None:
+    assert plain_city("北京市") == "北京"
+    assert plain_city("上海市") == "上海"
 
 
 def test_couple_budget_stacks_per_person() -> None:

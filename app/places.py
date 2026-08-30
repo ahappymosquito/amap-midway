@@ -1,6 +1,6 @@
 """多点选址业务模块。
 
-本文件根据多个通勤点搜索中间区域的餐馆或酒店，按真实地铁时长排序，并为餐馆叠加热门必吃/烟火小店榜可视化。
+本文件根据多个通勤点搜索中间区域的餐馆或酒店，按真实地铁时长排序，并为餐馆叠加热门必吃/烟火小店榜可视化；外链带推断城市。
 """
 
 import asyncio
@@ -116,6 +116,7 @@ async def search_places_between(
                     lat=record.lat,
                     category=category,
                     poi_id=record.id,
+                    city=city,
                 ),
                 board=_board_tag(record.id, champion_ids, street_ids),
             )

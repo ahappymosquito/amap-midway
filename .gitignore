@@ -7,3 +7,5 @@ __pycache__/
 .playwright-mcp/
 local-*.png
 prod-*.png
+local-search-debug.json
+_debug_search.py

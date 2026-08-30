@@ -1,6 +1,6 @@
 """地铁线路与公交规划解析模块。
 
-本文件从高德 POI 和公交/骑行规划结果中提取线路名、站点和折线坐标，供地图同线路同色标注使用。
+本文件从高德 POI 和公交/骑行规划结果中提取线路名、站点和折线坐标；地铁方案末段默认改成出站骑行，特别近才保留走路。
 """
 
 from __future__ import annotations
@@ -24,6 +24,10 @@ STATION_NAME_RE = re.compile(r"（地铁站）|\(地铁站\)|地铁站$")
 BBOX_PAD_M = 900
 METRO_STATION_LIMIT = 40
 MAX_TRANSIT_PLANS = 3
+LAST_MILE_WALK_MAX_M = 400
+LAST_MILE_WALK_MAX_S = 240
+RIDING_SPEED_MPS = 3.5
+WALK_SPEED_MPS = 1.25
 
 
 def parse_line_names(*texts: str) -> list[str]:
@@ -134,7 +138,7 @@ def _has_metro(plan: TransitPlan) -> bool:
 
 
 def fill_plan_stats(plan: TransitPlan) -> TransitPlan:
-    """补齐走路、地铁、换乘时长和分段明细。"""
+    """补齐走路、地铁、换乘时长和分段明细，并把出站末段改成骑行（特别近才走路）。"""
 
     walking = 0
     metro = 0
@@ -148,8 +152,8 @@ def fill_plan_stats(plan: TransitPlan) -> TransitPlan:
         amount = duration or 0
         if mode == "WALK":
             walking += amount
-            prev_ride = any((plan.segments[item].mode or "").upper() != "WALK" for item in range(index))
-            next_ride = any((plan.segments[item].mode or "").upper() != "WALK" for item in range(index + 1, total))
+            prev_ride = any(_is_transit_mode(plan.segments[item].mode) for item in range(index))
+            next_ride = any(_is_transit_mode(plan.segments[item].mode) for item in range(index + 1, total))
             if prev_ride and next_ride:
                 transfer += amount
                 transfer_count += 1
@@ -159,6 +163,8 @@ def fill_plan_stats(plan: TransitPlan) -> TransitPlan:
             else:
                 label = "步行到店"
             legs.append(RouteLeg(label=label, mode="WALK", duration_s=duration))
+        elif mode == "RIDING":
+            legs.append(RouteLeg(label=segment.line or "骑行到店", mode="RIDING", duration_s=duration))
         elif mode in {"SUBWAY", "METRO", "METRO_RAIL"}:
             metro += amount
             legs.append(RouteLeg(label=segment.line or "地铁", mode="SUBWAY", duration_s=duration))
@@ -171,7 +177,75 @@ def fill_plan_stats(plan: TransitPlan) -> TransitPlan:
     plan.transfer_s = transfer or None
     plan.transfer_count = transfer_count
     plan.legs = legs
+    return _apply_last_mile(plan)
+
+
+def _apply_last_mile(plan: TransitPlan) -> TransitPlan:
+    """下地铁后默认骑行到店；直线距离很近或走路很短时才保留步行。"""
+
+    last_index = _last_mile_walk_index(plan.segments)
+    if last_index is None:
+        last_ride = next((item for item in reversed(plan.segments) if (item.mode or "").upper() == "RIDING"), None)
+        if last_ride:
+            plan.lastmile_mode = "RIDING"
+            plan.lastmile_s = last_ride.duration_s
+        return plan
+    segment = plan.segments[last_index]
+    walk_s = segment.duration_s or 0
+    distance_m = _path_length_m(segment.path)
+    if _is_short_last_mile(walk_s, distance_m):
+        plan.lastmile_mode = "WALK"
+        plan.lastmile_s = walk_s or None
+        return plan
+    ride_s = _estimate_ride_seconds(walk_s, distance_m)
+    if plan.duration_s is not None:
+        plan.duration_s = max(0, plan.duration_s - walk_s + ride_s)
+    remaining_walk = max(0, (plan.walking_s or 0) - walk_s)
+    plan.walking_s = remaining_walk or None
+    plan.lastmile_mode = "RIDING"
+    plan.lastmile_s = ride_s
+    segment.mode = "RIDING"
+    segment.duration_s = ride_s
+    if last_index < len(plan.legs):
+        plan.legs[last_index] = RouteLeg(label="骑行到店", mode="RIDING", duration_s=ride_s)
     return plan
+
+
+def _last_mile_walk_index(segments: list[RouteSegment]) -> int | None:
+    last_index = None
+    for index, segment in enumerate(segments):
+        if (segment.mode or "").upper() != "WALK":
+            continue
+        prev_transit = any(_is_transit_mode(item.mode) for item in segments[:index])
+        next_transit = any(_is_transit_mode(item.mode) for item in segments[index + 1 :])
+        if prev_transit and not next_transit:
+            last_index = index
+    return last_index
+
+
+def _is_short_last_mile(walk_s: int, distance_m: int) -> bool:
+    if distance_m > 0:
+        return distance_m <= LAST_MILE_WALK_MAX_M
+    return walk_s <= LAST_MILE_WALK_MAX_S
+
+
+def _estimate_ride_seconds(walk_s: int, distance_m: int) -> int:
+    if distance_m > 0:
+        return max(20, round(distance_m / RIDING_SPEED_MPS))
+    if walk_s > 0:
+        return max(20, round(walk_s * WALK_SPEED_MPS / RIDING_SPEED_MPS))
+    return 20
+
+
+def _path_length_m(path: list[RoutePoint]) -> int:
+    total = 0
+    for start, end in zip(path, path[1:]):
+        total += haversine_distance_m(start.lng, start.lat, end.lng, end.lat)
+    return total
+
+
+def _is_transit_mode(mode: str | None) -> bool:
+    return (mode or "").upper() not in {"", "WALK", "RIDING"}
 
 
 def plan_summary(segments: list[RouteSegment]) -> str:

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "amap-find"
-version = "0.1.6"
+version = "0.1.7"
 description = "高德多点选址可视化 FastAPI 单页应用"
 authors = ["Codex <codex@example.com>"]
 readme = "README.md"
