@@ -1,6 +1,6 @@
 """多点选址业务模块。
 
-本文件根据多个通勤点搜索中间区域的餐馆或酒店，按真实地铁时长排序，并为餐馆叠加扫街榜状元/烟火小店/甄选可视化。
+本文件根据一个或多个通勤点搜索附近或中间区域的餐馆或酒店，按真实地铁时长排序，并为餐馆叠加扫街榜状元/烟火小店/甄选可视化。
 """
 
 import asyncio
@@ -40,10 +40,10 @@ async def search_places_between(
     people_count: int,
     city: str = "",
 ) -> PlacesSearchResponse:
-    """搜索多个通勤点之间的餐馆或酒店候选。城市由第一个可解析地名推断。"""
+    """搜索一个或多个通勤点附近/之间的餐馆或酒店候选。城市由第一个可解析地点推断。"""
 
-    if len(origins) < 2:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="至少填写两个地点。")
+    if len(origins) < 1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="至少填写一个地点。")
 
     points, city = await _resolve_origins(client, origins, city)
 
@@ -174,8 +174,21 @@ async def resolve_origin(client: AmapClient, origin: OriginInput, label: str, ci
     """把地址或坐标解析为统一的地点信息。"""
 
     if origin.lng is not None and origin.lat is not None:
-        address = (origin.address or "").strip() or label
-        return LocationResponse(lng=origin.lng, lat=origin.lat, formatted_address=address, city=city)
+        custom = (origin.address or "").strip()
+        try:
+            located = await client.reverse_geocode(origin.lng, origin.lat)
+        except HTTPException:
+            return LocationResponse(
+                lng=origin.lng,
+                lat=origin.lat,
+                formatted_address=custom or label,
+                city=city,
+            )
+        if custom:
+            located.formatted_address = custom
+        if city and not located.city:
+            located.city = city
+        return located
     address = (origin.address or "").strip()
     if not address:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"{label} 请填写地址或经纬度。")

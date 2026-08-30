@@ -1,6 +1,6 @@
 """双点选址路由模块。
 
-本文件提供多点之间搜索餐馆或酒店、单段地铁通勤时长，以及选店后地铁/骑行折线的接口。
+本文件提供按一个或多个通勤点搜索餐馆或酒店、单段地铁通勤时长，以及选店后地铁/骑行折线的接口。
 """
 
 from typing import Annotated
@@ -21,7 +21,7 @@ async def search_places(
     payload: PlacesSearchRequest,
     client: AmapClient = Depends(get_amap_client),
 ) -> PlacesSearchResponse:
-    """在两个通勤点之间搜索餐馆或酒店。"""
+    """按一个或多个通勤点搜索餐馆或酒店。"""
 
     return await search_places_between(
         client,

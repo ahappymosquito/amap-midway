@@ -1,6 +1,6 @@
-"""双点选址接口测试。
+"""选址接口测试。
 
-本文件验证两点搜索参数校验、差标字段，以及候选结果对高德客户端的集成行为。
+本文件验证一到多个通勤点搜索参数校验、差标字段，以及候选结果对高德客户端的集成行为。
 """
 
 from collections.abc import Iterator
@@ -20,8 +20,12 @@ class FakeAmapClient:
             return LocationResponse(lng=116.492661, lat=39.996856, formatted_address=address, city=city or "北京")
         return LocationResponse(lng=116.406180, lat=39.959491, formatted_address=address, city=city or "北京")
 
+    async def reverse_geocode(self, lng: float, lat: float) -> LocationResponse:
+        return LocationResponse(lng=lng, lat=lat, formatted_address="望京街附近", city="北京")
+
     async def reverse_city(self, lng: float, lat: float) -> str:
-        return "北京"
+        located = await self.reverse_geocode(lng, lat)
+        return located.city
 
     async def search_communities(self, lng: float, lat: float, radius: int) -> list[Community]:
         return []
@@ -229,10 +233,35 @@ def test_restaurant_search_marks_saojie_boards(client: TestClient) -> None:
     assert "amap.com/ranking/" in payload["amap_ranking_url"]
 
 
-def test_places_search_requires_origin(client: TestClient) -> None:
+def test_places_search_accepts_single_origin(client: TestClient) -> None:
     response = client.post(
         "/api/places/search",
         json={"origins": [{"address": "中国黄金大厦"}], "category": "restaurant"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["origins"]) == 1
+    assert payload["radius_m"] == 1500
+    assert payload["places"]
+
+
+def test_places_search_accepts_coordinate_origin(client: TestClient) -> None:
+    response = client.post(
+        "/api/places/search",
+        json={"origins": [{"lng": 116.48, "lat": 39.99}], "category": "restaurant"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["origins"][0]["formatted_address"] == "望京街附近"
+    assert payload["origins"][0]["city"] == "北京"
+
+
+def test_places_search_requires_origin(client: TestClient) -> None:
+    response = client.post(
+        "/api/places/search",
+        json={"origins": [], "category": "restaurant"},
     )
 
     assert response.status_code == 422

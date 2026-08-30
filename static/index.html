@@ -1,11 +1,11 @@
-<!-- 本文件实现多点选址单页：地点历史、扫街榜状元/烟火/甄选筛选、出站骑行明细。 -->
+<!-- 本文件实现多点选址单页：网页定位、单起点搜索、地点历史、扫街榜筛选、出站骑行明细。 -->
 <!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>多点选址 · 餐馆酒店</title>
-    <link rel="stylesheet" href="/static/styles.css?v=019" />
+    <link rel="stylesheet" href="/static/styles.css?v=0110" />
   </head>
   <body>
     <main class="app-shell">
@@ -17,20 +17,23 @@
           <span class="legend-item mode-riding">出站骑行</span>
           <span class="legend-item mode-walk">步行换乘</span>
         </div>
-        <div id="mapStatus" class="map-status" role="status">输入至少两个地点，在地图上选择餐馆或酒店</div>
+        <div id="mapStatus" class="map-status" role="status">输入至少一个地点，在地图上选择餐馆或酒店</div>
       </section>
 
       <aside class="control-panel" aria-label="搜索控制面板">
         <header class="panel-header">
           <h1>多点选址</h1>
-          <p>按真实地铁时间比较中间的餐馆和酒店。地点会记在本机浏览器里，下次打开可接着用。城市由地点名自动推断。</p>
+          <p>按真实地铁时间比较餐馆和酒店。打开页面会尝试定位并填入你的大致位置；一个地点即可搜索附近，也可以再加其他人的地点。地点会记在本机浏览器里。</p>
         </header>
 
         <form id="meetForm" class="search-form">
           <div id="originsList" class="origins-list"></div>
           <datalist id="originHistory"></datalist>
           <div id="originHistoryBar" class="origin-history" hidden></div>
-          <button id="addOriginButton" type="button">添加地点</button>
+          <div class="origin-actions">
+            <button id="locateButton" type="button">使用当前位置</button>
+            <button id="addOriginButton" type="button">添加地点</button>
+          </div>
 
           <fieldset>
             <legend>找什么</legend>
@@ -73,6 +76,6 @@
       </aside>
     </main>
 
-    <script src="/static/app.js?v=019" defer></script>
+    <script src="/static/app.js?v=0110" defer></script>
   </body>
 </html>

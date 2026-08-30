@@ -1,6 +1,6 @@
 """高德 Web 服务客户端模块。
 
-本文件封装高德地理编码、周边 POI/地铁站搜索、公交与骑行规划，并把高德响应转换为应用内部可用的结构。
+本文件封装高德地理编码、逆地理、周边 POI/地铁站搜索、公交与骑行规划，并把高德响应转换为应用内部可用的结构。
 """
 
 from typing import Any
@@ -109,21 +109,27 @@ class AmapClient:
             city=city or poi_city,
         )
 
+    async def reverse_geocode(self, lng: float, lat: float) -> LocationResponse:
+        """把坐标反解为地址和城市，供定位点和坐标起点使用。"""
+
+        payload = await self._get(
+            "/geocode/regeo",
+            {"location": f"{lng},{lat}"},
+        )
+        regeo = payload.get("regeocode") or {}
+        component = regeo.get("addressComponent") or {}
+        city = _string_or_empty(component.get("city")) or _string_or_empty(component.get("province"))
+        formatted = _string_or_empty(regeo.get("formatted_address")) or city or f"{lng:.5f},{lat:.5f}"
+        return LocationResponse(lng=lng, lat=lat, formatted_address=formatted, city=city)
+
     async def reverse_city(self, lng: float, lat: float) -> str:
         """用逆地理编码推断坐标所在城市。"""
 
         try:
-            payload = await self._get(
-                "/geocode/regeo",
-                {"location": f"{lng},{lat}"},
-            )
+            located = await self.reverse_geocode(lng, lat)
         except HTTPException:
             return ""
-        component = ((payload.get("regeocode") or {}).get("addressComponent") or {})
-        city = _string_or_empty(component.get("city"))
-        if city:
-            return city
-        return _string_or_empty(component.get("province"))
+        return located.city
 
     async def search_communities(self, lng: float, lat: float, radius: int) -> list[Community]:
         """搜索中心点附近住宅小区 POI。"""

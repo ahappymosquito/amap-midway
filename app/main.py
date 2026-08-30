@@ -1,6 +1,6 @@
 """FastAPI 应用入口。
 
-本文件创建高德多点选址可视化应用，注册 API 路由，并托管原生 HTML/CSS/JS 静态页面。
+本文件创建高德多点选址可视化应用（amap-midway），注册 API 路由，并托管原生 HTML/CSS/JS 静态页面。
 """
 
 from pathlib import Path
@@ -18,7 +18,7 @@ STATIC_DIR = BASE_DIR / "static"
 def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用。"""
 
-    app = FastAPI(title="高德多点选址", version="0.1.9")
+    app = FastAPI(title="高德多点选址", version="0.1.10")
     app.include_router(config.router)
     app.include_router(geocode.router)
     app.include_router(communities.router)

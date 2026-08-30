@@ -1,6 +1,6 @@
 """高德客户端测试。
 
-本文件使用 mock 传输层验证高德地理编码、周边搜索、空结果和错误响应的转换逻辑。
+本文件使用 mock 传输层验证高德地理编码、逆地理、周边搜索、空结果和错误响应的转换逻辑。
 """
 
 import httpx
@@ -98,6 +98,30 @@ async def test_geocode_infers_city_from_poi() -> None:
     result = await client.geocode("北控水务大厦")
 
     assert result.city == "北京市"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_reverse_geocode_reads_address_and_city() -> None:
+    respx.get("https://restapi.amap.com/v3/geocode/regeo").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "status": "1",
+                "regeocode": {
+                    "formatted_address": "北京市朝阳区望京街道",
+                    "addressComponent": {"city": [], "province": "北京市"},
+                },
+            },
+        )
+    )
+    client = AmapClient(Settings(AMAP_WEB_KEY="test-key"))
+
+    result = await client.reverse_geocode(116.48, 39.99)
+
+    assert result.formatted_address == "北京市朝阳区望京街道"
+    assert result.city == "北京市"
+    assert await client.reverse_city(116.48, 39.99) == "北京市"
 
 
 @pytest.mark.asyncio

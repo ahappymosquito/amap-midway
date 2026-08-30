@@ -1,4 +1,4 @@
-// 本文件实现多点选址交互：地点历史、扫街榜网页跳转与筛选、美团/携程外链、地铁末段出站骑行。
+// 本文件实现多点选址交互：网页定位、单起点搜索、地点历史、扫街榜筛选、美团/携程外链、地铁末段出站骑行。
 const state = {
   map: null,
   originMarkers: [],
@@ -14,7 +14,7 @@ const state = {
   metroStations: [],
   metroLines: [],
   selectedPlaceId: null,
-  originCount: 2,
+  originCount: 1,
   routeToken: 0,
   travelMode: "transit",
   selectedPlanIndex: {},
@@ -29,6 +29,7 @@ const state = {
 const elements = {
   meetForm: document.querySelector("#meetForm"),
   originsList: document.querySelector("#originsList"),
+  locateButton: document.querySelector("#locateButton"),
   addOriginButton: document.querySelector("#addOriginButton"),
   peopleInput: document.querySelector("#peopleInput"),
   budgetInput: document.querySelector("#budgetInput"),
@@ -51,6 +52,7 @@ const elements = {
 
 const ORIGIN_COLORS = ["#0f766e", "#c2410c", "#7c3aed", "#0369a1", "#b45309", "#be185d"];
 const RECOMMEND_COUNT = 3;
+const MIN_ORIGINS = 1;
 const MAX_ORIGINS = 6;
 const WALK_COLOR = "#94a3b8";
 const RIDING_COLOR = "#15803d";
@@ -100,7 +102,7 @@ document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
   restoreLastForm();
-  renderOriginInputs();
+  renderOriginInputs([]);
   bindControls();
   updateBudgetHint();
   renderOriginHistory();
@@ -112,13 +114,37 @@ async function init() {
     }
     await loadAmapScript(config.amap_js_key);
     initMap();
-    setMessage("至少输入两个地点。主要在地图上点选，列表只展示最推荐的几家。");
-  } catch (error) {
-    setMessage(error.message, true);
+    if (elements.locateButton) {
+      elements.locateButton.disabled = true;
+      elements.locateButton.textContent = "定位中…";
+    }
+    const located = await locateCurrentPosition();
+    if (located && !originAHasUserInput()) {
+      applyCurrentPosition(located);
+      setMessage("已按大致位置填入地点 A，可改或再添加其他人的地点。");
+      elements.mapStatus.textContent = "已定位到大致位置，至少一个地点即可搜索餐馆或酒店";
+      return;
+    }
+    if (!originAHasUserInput()) {
+      restoreSavedOrigins();
+      setMessage("至少一个地点即可搜索。可点「使用当前位置」或手动填写。");
+    } else if (!located) {
+      setMessage("未能自动定位，将使用你填写的地点。");
+    }
+  } finally {
+    if (elements.locateButton) {
+      elements.locateButton.disabled = false;
+      elements.locateButton.textContent = "使用当前位置";
+    }
   }
 }
 
 function bindControls() {
+  if (elements.locateButton) {
+    elements.locateButton.addEventListener("click", async () => {
+      await locateAndFill({ announce: true });
+    });
+  }
   elements.addOriginButton.addEventListener("click", () => {
     if (state.originCount >= MAX_ORIGINS) {
       return;
@@ -196,26 +222,47 @@ function bindControls() {
   }
 }
 
-function renderOriginInputs() {
-  const previous = [...elements.originsList.querySelectorAll("input")].map((input) => input.value);
-  const restored = previous.some(Boolean) ? previous : loadLastOrigins();
-  if (!previous.length && restored.length >= 2) {
-    state.originCount = Math.min(MAX_ORIGINS, Math.max(2, restored.length));
-  }
+function readOriginRows() {
+  return [...elements.originsList.querySelectorAll("input")].map((input) => originRowFromInput(input));
+}
+
+function originRowFromInput(input) {
+  const lng = Number(input.dataset.lng);
+  const lat = Number(input.dataset.lat);
+  return {
+    address: input.value.trim(),
+    lng: Number.isFinite(lng) ? lng : null,
+    lat: Number.isFinite(lat) ? lat : null,
+  };
+}
+
+function renderOriginInputs(presetRows) {
+  const previous = Array.isArray(presetRows) ? presetRows : readOriginRows();
   elements.originsList.innerHTML = "";
   for (let index = 0; index < state.originCount; index += 1) {
     const label = document.createElement("label");
     const letter = originLetter(index);
+    const canRemove = state.originCount > MIN_ORIGINS && index >= 1;
+    const placeholder = index === 0 ? "我的位置或地点 A" : `输入地点 ${letter}`;
     label.innerHTML = `
       地点 ${letter}
       <span class="origin-row">
-        <input type="text" name="origin-${letter}" data-origin-index="${index}" list="originHistory" autocomplete="on" placeholder="输入地点 ${letter}" />
-        ${index >= 2 ? `<button type="button" class="remove-origin" data-remove-index="${index}">删除</button>` : ""}
+        <input type="text" name="origin-${letter}" data-origin-index="${index}" list="originHistory" autocomplete="on" placeholder="${placeholder}" />
+        ${canRemove ? `<button type="button" class="remove-origin" data-remove-index="${index}">删除</button>` : ""}
       </span>
     `;
     const input = label.querySelector("input");
-    input.value = restored[index] || "";
-    input.addEventListener("input", persistOriginDraft);
+    const row = previous[index] || {};
+    input.value = row.address || "";
+    if (Number.isFinite(row.lng) && Number.isFinite(row.lat)) {
+      input.dataset.lng = String(row.lng);
+      input.dataset.lat = String(row.lat);
+    }
+    input.addEventListener("input", () => {
+      delete input.dataset.lng;
+      delete input.dataset.lat;
+      persistOriginDraft();
+    });
     input.addEventListener("change", () => {
       persistOriginDraft();
       rememberOriginHistory();
@@ -228,17 +275,146 @@ function renderOriginInputs() {
   elements.originsList.querySelectorAll("[data-remove-index]").forEach((button) => {
     button.addEventListener("click", () => {
       const index = Number(button.dataset.removeIndex);
-      const values = [...elements.originsList.querySelectorAll("input")].map((input) => input.value);
+      const values = readOriginRows();
       values.splice(index, 1);
-      state.originCount = Math.max(2, values.length);
-      renderOriginInputs();
-      [...elements.originsList.querySelectorAll("input")].forEach((input, inputIndex) => {
-        input.value = values[inputIndex] || "";
-      });
+      state.originCount = Math.max(MIN_ORIGINS, values.length);
+      renderOriginInputs(values);
       persistOriginDraft();
     });
   });
   elements.addOriginButton.disabled = state.originCount >= MAX_ORIGINS;
+}
+
+function originAHasUserInput() {
+  const input = document.querySelector("input[data-origin-index='0']");
+  return Boolean(input && input.value.trim());
+}
+
+function restoreSavedOrigins() {
+  const saved = loadLastOrigins();
+  if (!saved.length) {
+    state.originCount = MIN_ORIGINS;
+    renderOriginInputs([]);
+    return;
+  }
+  state.originCount = Math.min(MAX_ORIGINS, Math.max(MIN_ORIGINS, saved.length));
+  renderOriginInputs(saved.map((address) => ({ address, lng: null, lat: null })));
+}
+
+async function locateAndFill({ announce = false } = {}) {
+  if (!window.AMap) {
+    if (announce) {
+      setMessage("地图尚未加载，无法定位。", true);
+    }
+    return null;
+  }
+  if (elements.locateButton) {
+    elements.locateButton.disabled = true;
+    elements.locateButton.textContent = "定位中…";
+  }
+  try {
+    const located = await locateCurrentPosition();
+    if (!located) {
+      if (announce) {
+        setMessage("未能取得大致位置，请检查定位权限，或手动填写地点。", true);
+      }
+      return null;
+    }
+    applyCurrentPosition(located);
+    if (announce) {
+      setMessage("已按大致位置填入地点 A，可改成更精确的地点。");
+    }
+    return located;
+  } finally {
+    if (elements.locateButton) {
+      elements.locateButton.disabled = false;
+      elements.locateButton.textContent = "使用当前位置";
+    }
+  }
+}
+
+function applyCurrentPosition(located) {
+  const rows = readOriginRows();
+  rows[0] = { address: located.address, lng: located.lng, lat: located.lat };
+  state.originCount = Math.max(state.originCount, MIN_ORIGINS);
+  renderOriginInputs(rows);
+  persistOriginDraft();
+}
+
+function locateCurrentPosition() {
+  return new Promise((resolve) => {
+    if (!window.AMap?.plugin) {
+      resolve(null);
+      return;
+    }
+    window.AMap.plugin(["AMap.Geolocation"], () => {
+      const geolocation = new window.AMap.Geolocation({
+        enableHighAccuracy: false,
+        timeout: 8000,
+        convert: true,
+        getCityWhenFail: true,
+        needAddress: true,
+        showButton: false,
+        showMarker: false,
+        showCircle: false,
+        panToLocation: false,
+        zoomToAccuracy: false,
+      });
+      geolocation.getCurrentPosition((status, result) => {
+        if (status !== "complete" || !result?.position) {
+          resolve(null);
+          return;
+        }
+        const lng = typeof result.position.getLng === "function" ? result.position.getLng() : result.position.lng;
+        const lat = typeof result.position.getLat === "function" ? result.position.getLat() : result.position.lat;
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+          resolve(null);
+          return;
+        }
+        const ready = (address) => resolve({ lng, lat, address: address || "当前位置" });
+        const formatted = addressFromGeoResult(result);
+        if (formatted) {
+          ready(formatted);
+          return;
+        }
+        reverseAddress(lng, lat).then(ready);
+      });
+    });
+  });
+}
+
+function addressFromGeoResult(result) {
+  if (!result || typeof result !== "object") {
+    return "";
+  }
+  const direct = result.formattedAddress || result.formatted_address || "";
+  if (direct) {
+    return String(direct);
+  }
+  const component = result.addressComponent || result.address_component || {};
+  return [component.province, component.city, component.district, component.township, component.street, component.streetNumber || component.street_number]
+    .map((item) => String(item || "").trim())
+    .filter((item, index, list) => item && list.indexOf(item) === index)
+    .join("");
+}
+
+function reverseAddress(lng, lat) {
+  return new Promise((resolve) => {
+    if (!window.AMap?.plugin) {
+      resolve("");
+      return;
+    }
+    window.AMap.plugin(["AMap.Geocoder"], () => {
+      const geocoder = new window.AMap.Geocoder();
+      geocoder.getAddress([lng, lat], (status, result) => {
+        if (status === "complete" && result?.regeocode?.formattedAddress) {
+          resolve(result.regeocode.formattedAddress);
+          return;
+        }
+        resolve("");
+      });
+    });
+  });
 }
 
 function persistOriginDraft() {
@@ -346,6 +522,8 @@ function fillOriginFromHistory(name) {
       : null;
   const target = empty || focused || inputs[0];
   target.value = name;
+  delete target.dataset.lng;
+  delete target.dataset.lat;
   persistOriginDraft();
   target.focus();
 }
@@ -391,7 +569,7 @@ function loadAmapScript(key) {
       return;
     }
     const script = document.createElement("script");
-    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.Transfer,AMap.Riding,AMap.Scale,AMap.ToolBar`;
+    script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.Transfer,AMap.Riding,AMap.Scale,AMap.ToolBar,AMap.Geolocation,AMap.Geocoder`;
     script.async = true;
     script.onload = resolve;
     script.onerror = () => reject(new Error("高德 JS API 加载失败，请检查 Key、网络和域名白名单。"));
@@ -417,8 +595,8 @@ async function searchMeet() {
     return;
   }
   const origins = collectOrigins();
-  if (origins.length < 2) {
-    setMessage("请至少填写两个地点。", true);
+  if (origins.length < MIN_ORIGINS) {
+    setMessage("请至少填写一个地点。", true);
     return;
   }
   setBusy(true);
@@ -454,7 +632,8 @@ async function searchMeet() {
     renderLegend([]);
     const categoryLabel = result.category === "hotel" ? "酒店" : "餐馆";
     const cityLabel = result.origins[0]?.city ? `，城市 ${result.origins[0].city}` : "";
-    elements.mapStatus.textContent = `${result.origins.length} 个地点之间，${formatDistance(result.radius_m)} 范围${cityLabel}`;
+    const rangeLabel = result.origins.length === 1 ? "附近" : "之间";
+    elements.mapStatus.textContent = `${result.origins.length} 个地点${rangeLabel}，${formatDistance(result.radius_m)} 范围${cityLabel}`;
     setMessage(
       result.places.length
         ? `找到 ${result.places.length} 个${categoryLabel}。前 ${Math.min(RECOMMEND_COUNT, result.places.length)} 名已预规划路线，点选后只显示一种出行方案。`
@@ -468,10 +647,19 @@ async function searchMeet() {
 }
 
 function collectOrigins() {
-  return [...elements.originsList.querySelectorAll("input")]
-    .map((input) => input.value.trim())
-    .filter(Boolean)
-    .map((address) => ({ address }));
+  return readOriginRows()
+    .filter((row) => row.address || (row.lng != null && row.lat != null))
+    .map((row) => {
+      const origin = {};
+      if (row.address) {
+        origin.address = row.address;
+      }
+      if (row.lng != null && row.lat != null) {
+        origin.lng = row.lng;
+        origin.lat = row.lat;
+      }
+      return origin;
+    });
 }
 
 function cacheRecommendedRoutes(places) {

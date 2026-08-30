@@ -1,6 +1,6 @@
 """接口数据模型模块。
 
-本文件定义配置、地理编码、多点选址、地铁站与线路、多种出行方案折线和网页看价外链的 Pydantic 模型。
+本文件定义配置、地理编码、一到多个通勤点选址、地铁站与线路、多种出行方案折线和网页看价外链的 Pydantic 模型。
 """
 
 from typing import Literal
@@ -55,9 +55,9 @@ class OriginInput(BaseModel):
 
 
 class PlacesSearchRequest(BaseModel):
-    """多个通勤点之间搜索餐馆或酒店。"""
+    """一个或多个通勤点附近/之间搜索餐馆或酒店。"""
 
-    origins: list[OriginInput] = Field(min_length=2, max_length=6)
+    origins: list[OriginInput] = Field(min_length=1, max_length=6)
     category: PlaceCategory
     city: str = Field(default="", max_length=40)
     people_count: int = Field(default=2, ge=1, le=8)

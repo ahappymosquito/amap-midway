@@ -1,4 +1,4 @@
-/* 本文件实现多点选址布局、地点历史、扫街榜筛选、路线描边闪烁，以及合计前后两块出行明细样式。 */
+/* 本文件实现多点选址布局、定位按钮、地点历史、扫街榜筛选、路线描边闪烁，以及合计前后两块出行明细样式。 */
 :root {
   --bg: #eef2f6;
   --panel: #ffffff;
@@ -448,6 +448,12 @@ input {
   white-space: nowrap;
 }
 
+.origin-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .origin-history {
   display: grid;
   gap: 8px;
@@ -620,7 +626,8 @@ button[type="button"] {
   background: #fff;
 }
 
-#addOriginButton {
+#addOriginButton,
+#locateButton {
   width: 100%;
 }
 
