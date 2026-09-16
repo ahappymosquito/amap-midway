@@ -24,6 +24,6 @@ def is_over_budget(
 
     if cost is None:
         return False
-    if category == "restaurant":
-        return cost > budget_per_person
-    return cost > couple_budget(budget_per_person, people_count)
+    if category == "hotel":
+        return cost > couple_budget(budget_per_person, people_count)
+    return cost > budget_per_person

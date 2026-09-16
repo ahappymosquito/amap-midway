@@ -277,6 +277,20 @@ def test_restaurant_search_marks_saojie_boards(client: TestClient) -> None:
     assert "amap.com/ranking/" in payload["amap_ranking_url"]
 
 
+def test_play_search_accepts_category(client: TestClient) -> None:
+    response = client.post(
+        "/api/places/search",
+        json={"origins": [{"address": "中国黄金大厦"}], "category": "play"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["category"] == "play"
+    assert payload["companion_category"] == "restaurant"
+    assert "companions" in payload
+    assert "amap.com/ranking/" in payload["amap_ranking_url"]
+
+
 def test_places_search_accepts_single_origin(client: TestClient) -> None:
     response = client.post(
         "/api/places/search",

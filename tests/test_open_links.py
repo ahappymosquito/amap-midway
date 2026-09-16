@@ -61,6 +61,13 @@ def test_plain_city_strips_suffix() -> None:
 def test_amap_ranking_url_uses_city_slug() -> None:
     assert amap_ranking_url("上海市", "food") == "https://www.amap.com/ranking/shanghai"
     assert amap_ranking_url("北京", "shop") == "https://www.amap.com/ranking/beijing/shop"
+    assert amap_ranking_url("北京", "scenic") == "https://www.amap.com/ranking/beijing/scenic"
+
+
+def test_play_links_use_meituan_search() -> None:
+    links = build_open_links(name="剧本杀", lng=116.45, lat=39.97, category="play", city="北京市")
+    assert "meituan.com/s/" in links.meituan
+    assert links.amap_board == "https://www.amap.com/ranking/beijing"
 
 
 def test_couple_budget_stacks_per_person() -> None:
@@ -78,6 +85,8 @@ def test_hotel_over_budget_uses_people_count() -> None:
     assert is_over_budget("hotel", 471, 300, 2) is False
     assert is_over_budget("hotel", 800, 300, 3) is False
     assert is_over_budget("hotel", None, 300, 2) is False
+    assert is_over_budget("play", 320, 300, 2) is True
+    assert is_over_budget("coffee", 40, 300) is False
 
 
 def test_search_radius_is_clamped() -> None:

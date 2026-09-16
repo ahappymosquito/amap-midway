@@ -1,11 +1,12 @@
 """外链生成模块。
 
-本文件按城市和品类生成高德、美团、携程、点评和扫街榜网页链接：酒店走美团酒店 H5 与携程 searchWord 列表，餐馆走美团到餐页。
+本文件按城市和品类生成高德、美团、携程、点评和扫街榜网页链接：酒店走美团酒店 H5 与携程列表，美食/咖啡/酒吧走到餐页，玩乐/景点走美团搜索。
 """
 
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote, urlencode
 
+from app.ranking import ranking_kind_for
 from app.schemas import OpenLinks
 
 CHINA_TZ = timezone(timedelta(hours=8))
@@ -206,6 +207,11 @@ def build_open_links(
         meituan = _meituan_hotel_url(name, meituan_city_id, lng, lat, checkin, checkout)
         ctrip = _ctrip_hotel_url(name, city_name, checkin, checkout)
         dianping = None
+    elif category in ("play", "scenic"):
+        meituan = f"https://www.meituan.com/s/{encoded_name}"
+        ctrip = None
+        dianping_city_id = DIANPING_CITY_IDS.get(city_name, 2)
+        dianping = f"https://www.dianping.com/search/keyword/{dianping_city_id}/30_{encoded_name}"
     else:
         meituan = f"https://meishi.meituan.com/i/?ci={meituan_city_id}&q={encoded_name}"
         ctrip = None
@@ -218,16 +224,18 @@ def build_open_links(
         meituan_app=f"imeituan://www.meituan.com/search?q={encoded_name}&ci={meituan_city_id}",
         ctrip=ctrip,
         dianping=dianping,
-        amap_board=amap_ranking_url(city_name, "hotel" if category == "hotel" else "food"),
+        amap_board=amap_ranking_url(city_name, ranking_kind_for(category)),
     )
 
 
 def amap_ranking_url(city: str, kind: str = "food") -> str:
-    """生成高德扫街榜网页地址：美食状元榜、烟火小店或必住酒店。"""
+    """生成高德扫街榜网页地址。"""
 
     slug = AMAP_RANKING_SLUGS.get(plain_city(city), "beijing")
     if kind == "hotel":
         return f"https://www.amap.com/ranking/{slug}/hotel"
+    if kind == "scenic":
+        return f"https://www.amap.com/ranking/{slug}/scenic"
     if kind == "shop":
         return f"https://www.amap.com/ranking/{slug}/shop"
     if kind == "select":

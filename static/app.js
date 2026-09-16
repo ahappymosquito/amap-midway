@@ -1,4 +1,4 @@
-// 本文件实现多点选址交互：网页定位、单起点搜索、地点历史、扫街榜与酒店属性/携程房型筛选、美团/携程外链、地铁末段出站骑行。
+// 本文件实现多点选址交互：网页定位、扫街榜六类选址、附近搭配推荐、酒店属性与携程房型筛选、美团/携程外链。
 const state = {
   map: null,
   originMarkers: [],
@@ -24,6 +24,9 @@ const state = {
   hotelAttrFilter: "all",
   bedTypeFilter: "all",
   lastCategory: "",
+  companions: [],
+  companionMarkers: [],
+  companionCategory: "",
   pulseTimer: null,
   focusedOriginIndex: 0,
   rankingUrl: "",
@@ -49,10 +52,21 @@ const elements = {
   moreResults: document.querySelector("#moreResults"),
   moreResultsSummary: document.querySelector("#moreResultsSummary"),
   moreResultsList: document.querySelector("#moreResultsList"),
+  companionSection: document.querySelector("#companionSection"),
+  companionTitle: document.querySelector("#companionTitle"),
+  companionList: document.querySelector("#companionList"),
   originHistory: document.querySelector("#originHistory"),
   originHistoryBar: document.querySelector("#originHistoryBar"),
 };
 
+const CATEGORY_LABELS = {
+  restaurant: "美食",
+  hotel: "酒店",
+  play: "玩乐",
+  coffee: "咖啡",
+  bar: "酒吧",
+  scenic: "景点",
+};
 const HOTEL_ATTRS = [
   ["hotspring", "温泉"],
   ["esports", "电竞"],
@@ -139,7 +153,7 @@ async function init() {
     if (located && !originAHasUserInput()) {
       applyCurrentPosition(located);
       setMessage("已按大致位置填入地点 A，可改或再添加其他人的地点。");
-      elements.mapStatus.textContent = "已定位到大致位置，至少一个地点即可搜索餐馆或酒店";
+      elements.mapStatus.textContent = "已定位到大致位置，至少一个地点即可搜索美食、酒店或玩乐";
       return;
     }
     if (!originAHasUserInput()) {
@@ -468,7 +482,7 @@ function restoreLastForm() {
   if (form.budget) {
     elements.budgetInput.value = String(form.budget);
   }
-  if (form.category === "hotel" || form.category === "restaurant") {
+  if (form.category && CATEGORY_LABELS[form.category]) {
     const radio = document.querySelector(`input[name="category"][value="${form.category}"]`);
     if (radio) {
       radio.checked = true;
@@ -586,7 +600,16 @@ function updateBudgetHint() {
   if (elements.budgetLabelText) {
     elements.budgetLabelText.textContent = "人均预算（元）";
   }
-  elements.budgetHint.textContent = `按餐馆人均比较，预算 ${budget} 元。无人均则请到美团/点评核价。`;
+  const label = CATEGORY_LABELS[category] || "地点";
+  if (category === "scenic") {
+    elements.budgetHint.textContent = `按门票/人均比较，预算 ${budget} 元。无价格则请核价。`;
+    return;
+  }
+  if (category === "play") {
+    elements.budgetHint.textContent = `按玩乐人均比较，预算 ${budget} 元。无价格则请核价。`;
+    return;
+  }
+  elements.budgetHint.textContent = `按${label}人均比较，预算 ${budget} 元。无人均则请到美团/点评核价。`;
 }
 
 function loadAmapScript(key) {
@@ -651,6 +674,8 @@ async function searchMeet() {
     state.bedTypeFilter = "all";
     state.lastCategory = result.category || "";
     state.rankingUrl = result.amap_ranking_url || "";
+    state.companions = result.companions || [];
+    state.companionCategory = result.companion_category || "";
     persistOriginDraft();
     persistLastForm();
     rememberOriginHistory((result.origins || []).map((item) => item.formatted_address));
@@ -659,8 +684,9 @@ async function searchMeet() {
     drawMetroNetwork();
     renderBoardBar(result.category);
     renderPlaces();
+    renderCompanions();
     renderLegend([]);
-    const categoryLabel = result.category === "hotel" ? "酒店" : "餐馆";
+    const categoryLabel = CATEGORY_LABELS[result.category] || "地点";
     const cityLabel = result.origins[0]?.city ? `，城市 ${result.origins[0].city}` : "";
     const rangeLabel = result.origins.length === 1 ? "附近" : "之间";
     elements.mapStatus.textContent = `${result.origins.length} 个地点${rangeLabel}，${formatDistance(result.radius_m)} 范围${cityLabel}`;
@@ -732,7 +758,18 @@ function drawOrigins(radius) {
     marker.on("click", () => selectPlace(place.id));
     return marker;
   });
-  state.map.add([...state.originMarkers, ...state.overlapCircles, ...state.markers]);
+  state.companionMarkers = (state.companions || []).map((place) => {
+    const marker = new AMap.Marker({
+      position: [place.lng, place.lat],
+      content: pinHtml("搭", "companion", "#db2777"),
+      offset: new AMap.Pixel(-14, -14),
+      title: place.name,
+      zIndex: 118,
+    });
+    marker.on("click", () => selectPlace(place.id));
+    return marker;
+  });
+  state.map.add([...state.originMarkers, ...state.overlapCircles, ...state.markers, ...state.companionMarkers]);
   state.map.setFitView([...state.originMarkers, ...state.overlapCircles], false, [48, 48, 48, 48]);
 }
 
@@ -765,6 +802,27 @@ function renderPlaces() {
   elements.moreResults.hidden = rest.length === 0;
   elements.moreResultsSummary.textContent = `其余 ${rest.length} 个结果`;
   applyBoardVisibility();
+}
+
+function renderCompanions() {
+  if (!elements.companionSection || !elements.companionList) {
+    return;
+  }
+  const companions = state.companions || [];
+  if (!companions.length) {
+    elements.companionSection.hidden = true;
+    elements.companionList.innerHTML = "";
+    return;
+  }
+  const label = CATEGORY_LABELS[state.companionCategory] || "地点";
+  if (elements.companionTitle) {
+    elements.companionTitle.textContent = `附近还可以 · ${label}`;
+  }
+  elements.companionSection.hidden = false;
+  elements.companionList.innerHTML = "";
+  companions.forEach((place, index) => {
+    elements.companionList.appendChild(placeItem(place, index));
+  });
 }
 
 function visiblePlaces() {
@@ -840,12 +898,17 @@ function renderBoardBar(category) {
     `;
     return;
   }
+  const rankingLink = `<a class="board-link" href="${escapeHtml(ranking)}" target="_blank" rel="noopener">${category === "scenic" ? "在高德打开必去景点榜" : "在高德打开扫街榜"}</a>`;
   if (category !== "restaurant") {
-    elements.boardBar.hidden = true;
-    elements.boardBar.innerHTML = "";
+    const championCount = state.places.filter((item) => item.board === "champion").length;
+    elements.boardBar.hidden = false;
+    elements.boardBar.innerHTML = `
+      <button type="button" class="board-chip${state.boardFilter === "all" ? " active" : ""}" data-board="all">全部</button>
+      <button type="button" class="board-chip${state.boardFilter === "champion" ? " active" : ""}" data-board="champion">状元榜 ${championCount}</button>
+      ${rankingLink}
+    `;
     return;
   }
-  const rankingLink = `<a class="board-link" href="${escapeHtml(ranking)}" target="_blank" rel="noopener">在高德打开扫街榜</a>`;
   const championCount = state.places.filter((item) => item.board === "champion").length;
   const streetCount = state.places.filter((item) => item.board === "street").length;
   const selectCount = state.places.filter((item) => item.board === "select").length;
@@ -898,7 +961,7 @@ function placeItem(place, index) {
   item.className = `result-item${place.over_budget ? " over-budget" : ""}`;
   item.tabIndex = 0;
   item.dataset.id = place.id;
-  const costLabel = "人均";
+  const costLabel = place.category === "scenic" ? "参考" : "人均";
   const boardBadge = filterBadges(place);
   const badge = place.over_budget
     ? `<span class="badge warn">超差标</span>`
@@ -978,7 +1041,7 @@ function renderOpenLinks(place) {
   if (place.category === "hotel" && links.ctrip) {
     items.push(["在携程看价", links.ctrip]);
   }
-  if (place.category === "restaurant" && links.dianping) {
+  if (place.category !== "hotel" && links.dianping) {
     items.push(["在点评看价", links.dianping]);
   }
   return items
@@ -987,7 +1050,7 @@ function renderOpenLinks(place) {
 }
 
 async function selectPlace(id) {
-  const place = state.places.find((item) => item.id === id);
+  const place = state.places.find((item) => item.id === id) || (state.companions || []).find((item) => item.id === id);
   if (!place) {
     return;
   }
@@ -1927,13 +1990,15 @@ function clearOverlay() {
   state.routeToken += 1;
   clearRouteOverlays();
   clearMetroNetwork();
-  const leftovers = [...state.originMarkers, ...state.overlapCircles, ...state.markers];
+  const leftovers = [...state.originMarkers, ...state.overlapCircles, ...state.markers, ...state.companionMarkers];
   if (leftovers.length && state.map) {
     state.map.remove(leftovers);
   }
   state.originMarkers = [];
   state.overlapCircles = [];
   state.markers = [];
+  state.companionMarkers = [];
+  state.companions = [];
   state.metroStations = [];
   state.metroLines = [];
   state.activeRoutes = [];
@@ -1945,6 +2010,9 @@ function clearOverlay() {
   if (elements.boardBar) {
     elements.boardBar.hidden = true;
     elements.boardBar.innerHTML = "";
+  }
+  if (elements.companionSection) {
+    elements.companionSection.hidden = true;
   }
   renderLegend([]);
 }

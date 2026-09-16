@@ -1,11 +1,11 @@
-<!-- 本文件实现多点选址单页：网页定位、单起点搜索、地点历史、扫街榜与酒店属性/携程房型筛选、出站骑行明细。 -->
+<!-- 本文件实现多点选址单页：网页定位、扫街榜六类选址、附近玩乐/美食搭配、酒店属性与携程房型筛选。 -->
 <!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>多点选址 · 餐馆酒店</title>
-    <link rel="stylesheet" href="/static/styles.css?v=0112" />
+    <link rel="stylesheet" href="/static/styles.css?v=0113" />
   </head>
   <body>
     <main class="app-shell">
@@ -17,13 +17,13 @@
           <span class="legend-item mode-riding">出站骑行</span>
           <span class="legend-item mode-walk">步行换乘</span>
         </div>
-        <div id="mapStatus" class="map-status" role="status">输入至少一个地点，在地图上选择餐馆或酒店</div>
+        <div id="mapStatus" class="map-status" role="status">输入至少一个地点，在地图上选择美食、酒店或玩乐</div>
       </section>
 
       <aside class="control-panel" aria-label="搜索控制面板">
         <header class="panel-header">
           <h1>多点选址</h1>
-          <p>按真实地铁时间比较餐馆和酒店。打开页面会尝试定位并填入你的大致位置；一个地点即可搜索附近，也可以再加其他人的地点。地点会记在本机浏览器里。</p>
+          <p>按真实地铁时间比较美食、酒店、玩乐、咖啡、酒吧和景点。一个地点即可搜附近，也可以再加其他人的地点。搜完会附带附近搭配推荐。</p>
         </header>
 
         <form id="meetForm" class="search-form">
@@ -37,9 +37,13 @@
 
           <fieldset>
             <legend>找什么</legend>
-            <div class="choice-row two">
-              <label><input type="radio" name="category" value="restaurant" checked /> 餐馆</label>
+            <div class="choice-row">
+              <label><input type="radio" name="category" value="restaurant" checked /> 美食</label>
               <label><input type="radio" name="category" value="hotel" /> 酒店</label>
+              <label><input type="radio" name="category" value="play" /> 玩乐</label>
+              <label><input type="radio" name="category" value="coffee" /> 咖啡</label>
+              <label><input type="radio" name="category" value="bar" /> 酒吧</label>
+              <label><input type="radio" name="category" value="scenic" /> 景点</label>
             </div>
           </fieldset>
 
@@ -72,10 +76,16 @@
             <summary id="moreResultsSummary">其余结果</summary>
             <ol id="moreResultsList" class="results-list"></ol>
           </details>
+          <section id="companionSection" class="companion-section" hidden>
+            <div class="results-header">
+              <h2 id="companionTitle">附近还可以</h2>
+            </div>
+            <ol id="companionList" class="results-list"></ol>
+          </section>
         </section>
       </aside>
     </main>
 
-    <script src="/static/app.js?v=0112" defer></script>
+    <script src="/static/app.js?v=0113" defer></script>
   </body>
 </html>

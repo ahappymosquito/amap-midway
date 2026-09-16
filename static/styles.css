@@ -1,4 +1,4 @@
-/* 本文件实现多点选址布局、定位按钮、地点历史、扫街榜与酒店属性/携程房型筛选、路线描边闪烁，以及合计前后两块出行明细样式。 */
+/* 本文件实现多点选址布局、扫街榜六类选项、附近搭配推荐、酒店筛选和路线描边闪烁样式。 */
 :root {
   --bg: #eef2f6;
   --panel: #ffffff;
@@ -877,6 +877,14 @@ button:disabled {
 
 .map-pin.over {
   background: #94a3b8;
+}
+
+.map-pin.companion {
+  background: #db2777;
+}
+
+.companion-section {
+  margin-top: 16px;
 }
 
 .info-card {

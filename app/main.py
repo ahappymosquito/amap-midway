@@ -18,7 +18,7 @@ STATIC_DIR = BASE_DIR / "static"
 def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用。"""
 
-    app = FastAPI(title="高德多点选址", version="0.1.12")
+    app = FastAPI(title="高德多点选址", version="0.1.13")
     app.include_router(config.router)
     app.include_router(geocode.router)
     app.include_router(communities.router)

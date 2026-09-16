@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-PlaceCategory = Literal["restaurant", "hotel"]
+PlaceCategory = Literal["restaurant", "hotel", "play", "coffee", "bar", "scenic"]
 
 
 class ConfigResponse(BaseModel):
@@ -55,7 +55,7 @@ class OriginInput(BaseModel):
 
 
 class PlacesSearchRequest(BaseModel):
-    """一个或多个通勤点附近/之间搜索餐馆或酒店。"""
+    """一个或多个通勤点附近/之间搜索美食、酒店、玩乐、咖啡、酒吧或景点。"""
 
     origins: list[OriginInput] = Field(min_length=1, max_length=6)
     category: PlaceCategory
@@ -144,7 +144,7 @@ class OriginRoutes(BaseModel):
 
 
 class Place(BaseModel):
-    """多点选址候选餐馆或酒店，酒店可带属性、携程房型与一级床型标签。"""
+    """多点选址候选地点，酒店可带属性与携程房型，餐馆/玩乐等可带扫街榜标签。"""
 
     id: str
     name: str
@@ -188,6 +188,8 @@ class PlacesSearchResponse(BaseModel):
     metro_stations: list[MetroStation] = Field(default_factory=list)
     metro_lines: list[MetroLine] = Field(default_factory=list)
     amap_ranking_url: str = ""
+    companions: list[Place] = Field(default_factory=list)
+    companion_category: str = ""
 
 
 class TransitDurationResponse(BaseModel):

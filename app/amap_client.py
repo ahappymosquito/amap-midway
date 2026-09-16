@@ -9,13 +9,9 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.distance import haversine_distance_m
+from app.ranking import PLACE_TYPES
 from app.schemas import Community, LocationResponse, PlaceCategory, PoiRecord
 from app.settings import Settings
-
-PLACE_TYPES: dict[PlaceCategory, str] = {
-    "restaurant": "050000",
-    "hotel": "100000",
-}
 
 SKIP_NAME_MARKERS = ("医院", "食堂", "社区餐厅", "宴会厅", "停车场")
 
@@ -170,7 +166,7 @@ class AmapClient:
         radius: int,
         category: PlaceCategory,
     ) -> list[PoiRecord]:
-        """按品类搜索中心点附近的餐馆或酒店 POI。"""
+        """按品类搜索中心点附近的美食、酒店、玩乐等 POI。"""
 
         records: list[PoiRecord] = []
         seen: set[str] = set()

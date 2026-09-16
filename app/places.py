@@ -1,6 +1,6 @@
 """多点选址业务模块。
 
-本文件根据一个或多个通勤点搜索附近或中间区域的餐馆或酒店，按真实地铁时长排序；餐馆叠加扫街榜可视化，酒店叠加属性筛选并用携程该店房型补一级床型。
+本文件根据一个或多个通勤点搜索附近美食、酒店、玩乐、咖啡、酒吧或景点，按真实地铁时长排序；叠加扫街榜分类，并给出附近搭配推荐。
 """
 
 import asyncio
@@ -14,6 +14,15 @@ from app.ctrip_rooms import attach_ctrip_bed_types
 from app.hotel_filters import HOTEL_PLACE_TYPE, HOTEL_TEXT_QUERIES, classify_hotel, hotel_has_filter_signal
 from app.metro import parse_all_transit_plans, parse_riding_payload, select_metro_stations, to_metro_station
 from app.open_links import amap_ranking_url, build_open_links
+from app.ranking import (
+    CHAMPION_KEYWORDS,
+    COMPANION_COUNT,
+    PLACE_TYPES,
+    SELECT_KEYWORD,
+    STREET_KEYWORD,
+    companion_category,
+    ranking_kind_for,
+)
 from app.schemas import (
     CommuteTimes,
     LocationResponse,
@@ -30,8 +39,6 @@ TRANSIT_RANK_LIMIT = 8
 TRANSIT_CONCURRENCY = 6
 PREPLAN_COUNT = 3
 BOARD_CHAMPION_KEYWORD = "状元榜"
-BOARD_STREET_KEYWORD = "烟火小店"
-BOARD_SELECT_KEYWORD = "品质甄选"
 
 
 async def search_places_between(
@@ -42,7 +49,7 @@ async def search_places_between(
     people_count: int,
     city: str = "",
 ) -> PlacesSearchResponse:
-    """搜索一个或多个通勤点附近/之间的餐馆或酒店候选。城市由第一个可解析地点推断。"""
+    """搜索一个或多个通勤点附近/之间的候选地点。城市由第一个可解析地点推断。"""
 
     if len(origins) < 1:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="至少填写一个地点。")
@@ -54,20 +61,34 @@ async def search_places_between(
     radius = search_radius_from_points(coords)
     around_task = client.search_around_pois(mid_lng, mid_lat, radius, category)
     hotel_extras: list[PoiRecord] = []
+    companion_cat = companion_category(category)
+    companion_task = (
+        client.search_around_pois(mid_lng, mid_lat, radius, companion_cat) if companion_cat else _empty_records()
+    )
     if category == "restaurant":
-        around, champion_records, street_records, select_records = await asyncio.gather(
+        around, champion_records, street_records, select_records, companion_records = await asyncio.gather(
             around_task,
-            client.search_text_pois(BOARD_CHAMPION_KEYWORD, city),
-            client.search_text_pois(BOARD_STREET_KEYWORD, city),
-            client.search_text_pois(BOARD_SELECT_KEYWORD, city),
+            client.search_text_pois(BOARD_CHAMPION_KEYWORD, city, types=PLACE_TYPES["restaurant"]),
+            client.search_text_pois(STREET_KEYWORD, city, types=PLACE_TYPES["restaurant"]),
+            client.search_text_pois(SELECT_KEYWORD, city, types=PLACE_TYPES["restaurant"]),
+            companion_task,
         )
-    else:
-        around, *hotel_groups = await asyncio.gather(
+    elif category == "hotel":
+        around, *hotel_groups, companion_records = await asyncio.gather(
             around_task,
             *[client.search_text_pois(keyword, city, types=HOTEL_PLACE_TYPE) for keyword in HOTEL_TEXT_QUERIES],
+            companion_task,
         )
         champion_records, street_records, select_records = [], [], []
         hotel_extras = [item for group in hotel_groups for item in group]
+    else:
+        champion_keyword = CHAMPION_KEYWORDS.get(category, BOARD_CHAMPION_KEYWORD)
+        around, champion_records, companion_records = await asyncio.gather(
+            around_task,
+            client.search_text_pois(champion_keyword, city, types=PLACE_TYPES[category]),
+            companion_task,
+        )
+        street_records, select_records = [], []
     max_distance = int(radius * 1.3)
     champion_ids = {
         item.id
@@ -142,7 +163,7 @@ async def search_places_between(
                     poi_id=record.id,
                     city=city,
                 ),
-                board=_board_tag(record.id, champion_ids, street_ids, select_ids, record.tag),
+                board=_board_tag(record.id, champion_ids, street_ids, select_ids, record.tag, category),
                 hotel_attrs=hotel_attrs,
                 bed_types=bed_types,
             )
@@ -153,6 +174,18 @@ async def search_places_between(
         await attach_ctrip_bed_types(places, city)
     for place in places[:PREPLAN_COUNT]:
         place.origin_routes = _origin_routes_from_payloads(payload_by_id.get(place.id), len(points))
+    companions = _companion_places(
+        companion_records if companion_cat else [],
+        companion_cat,
+        places,
+        points,
+        mid_lng,
+        mid_lat,
+        max_distance,
+        city,
+        budget_per_person,
+        people_count,
+    )
     return PlacesSearchResponse(
         origins=points,
         midpoint_lng=mid_lng,
@@ -165,7 +198,9 @@ async def search_places_between(
         places=places,
         metro_stations=metro_stations,
         metro_lines=[],
-        amap_ranking_url=amap_ranking_url(city, "hotel" if category == "hotel" else "food"),
+        amap_ranking_url=amap_ranking_url(city, ranking_kind_for(category)),
+        companions=companions,
+        companion_category=companion_cat or "",
     )
 
 
@@ -290,21 +325,83 @@ async def _metro_stations_between(
     return select_metro_stations(stations, points, center)
 
 
+async def _empty_records() -> list[PoiRecord]:
+    return []
+
+
+def _companion_places(
+    records: list[PoiRecord],
+    category: PlaceCategory | None,
+    places: list[Place],
+    points: list[LocationResponse],
+    mid_lng: float,
+    mid_lat: float,
+    max_distance: int,
+    city: str,
+    budget_per_person: int,
+    people_count: int,
+) -> list[Place]:
+    """从周边补一批不同品类的地点，供吃完再玩、玩完再吃。"""
+
+    if not category or not records:
+        return []
+    seen = {item.id for item in places}
+    picked: list[PoiRecord] = []
+    for record in sorted(records, key=lambda item: haversine_distance_m(mid_lng, mid_lat, item.lng, item.lat)):
+        if record.id in seen:
+            continue
+        if haversine_distance_m(mid_lng, mid_lat, record.lng, record.lat) > max_distance:
+            continue
+        picked.append(record)
+        seen.add(record.id)
+        if len(picked) >= COMPANION_COUNT:
+            break
+    companions: list[Place] = []
+    for record in picked:
+        farthest = max(haversine_distance_m(point.lng, point.lat, record.lng, record.lat) for point in points)
+        companions.append(
+            Place(
+                id=record.id,
+                name=record.name,
+                lng=record.lng,
+                lat=record.lat,
+                address=record.address,
+                category=category,
+                rating=record.rating,
+                cost=record.cost,
+                commutes=[CommuteTimes() for _ in points],
+                fairness_s=farthest,
+                over_budget=is_over_budget(category, record.cost, budget_per_person, people_count),
+                budget_unknown=record.cost is None,
+                open_links=build_open_links(
+                    name=record.name,
+                    lng=record.lng,
+                    lat=record.lat,
+                    category=category,
+                    poi_id=record.id,
+                    city=city,
+                ),
+            )
+        )
+    return companions
+
+
 def _board_tag(
     place_id: str,
     champion_ids: set[str],
     street_ids: set[str],
     select_ids: set[str],
     tag: str = "",
+    category: PlaceCategory = "restaurant",
 ) -> str | None:
     """把扫街榜状元/烟火小店/甄选命中标到候选店上。"""
 
     text = tag or ""
-    if place_id in champion_ids or "状元" in text or "必吃" in text:
+    if place_id in champion_ids or any(mark in text for mark in ("状元", "必吃", "必喝", "必去", "必享", "必住")):
         return "champion"
-    if place_id in street_ids or "烟火" in text:
+    if category == "restaurant" and (place_id in street_ids or "烟火" in text):
         return "street"
-    if place_id in select_ids or "甄选" in text:
+    if category == "restaurant" and (place_id in select_ids or "甄选" in text):
         return "select"
     return None
 
