@@ -1,6 +1,6 @@
 """多点选址业务模块。
 
-本文件根据一个或多个通勤点搜索附近或中间区域的餐馆或酒店，按真实地铁时长排序，并为餐馆叠加扫街榜状元/烟火小店/甄选可视化。
+本文件根据一个或多个通勤点搜索附近或中间区域的餐馆或酒店，按真实地铁时长排序；餐馆叠加扫街榜可视化，酒店叠加属性与一级床型关键词筛选。
 """
 
 import asyncio
@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 from app.amap_client import AmapClient
 from app.budget import couple_budget, is_over_budget
 from app.distance import centroid, haversine_distance_m, search_radius_from_points
+from app.hotel_filters import HOTEL_PLACE_TYPE, HOTEL_TEXT_QUERIES, classify_hotel, hotel_has_filter_signal
 from app.metro import parse_all_transit_plans, parse_riding_payload, select_metro_stations, to_metro_station
 from app.open_links import amap_ranking_url, build_open_links
 from app.schemas import (
@@ -51,6 +52,7 @@ async def search_places_between(
     mid_lng, mid_lat = centroid(coords)
     radius = search_radius_from_points(coords)
     around_task = client.search_around_pois(mid_lng, mid_lat, radius, category)
+    hotel_extras: list[PoiRecord] = []
     if category == "restaurant":
         around, champion_records, street_records, select_records = await asyncio.gather(
             around_task,
@@ -59,8 +61,12 @@ async def search_places_between(
             client.search_text_pois(BOARD_SELECT_KEYWORD, city),
         )
     else:
-        around = await around_task
+        around, *hotel_groups = await asyncio.gather(
+            around_task,
+            *[client.search_text_pois(keyword, city, types=HOTEL_PLACE_TYPE) for keyword in HOTEL_TEXT_QUERIES],
+        )
         champion_records, street_records, select_records = [], [], []
+        hotel_extras = [item for group in hotel_groups for item in group]
     max_distance = int(radius * 1.3)
     champion_ids = {
         item.id
@@ -90,6 +96,15 @@ async def search_places_between(
             continue
         records.append(extra)
         seen_ids.add(extra.id)
+    for extra in hotel_extras:
+        if extra.id in seen_ids:
+            continue
+        if haversine_distance_m(mid_lng, mid_lat, extra.lng, extra.lat) > max_distance:
+            continue
+        if not hotel_has_filter_signal(extra):
+            continue
+        records.append(extra)
+        seen_ids.add(extra.id)
     records.sort(
         key=lambda record: max(haversine_distance_m(point.lng, point.lat, record.lng, record.lat) for point in points)
     )
@@ -103,6 +118,7 @@ async def search_places_between(
     for record in records:
         commutes = commute_by_id.get(record.id) or [CommuteTimes() for _ in points]
         farthest = max(haversine_distance_m(point.lng, point.lat, record.lng, record.lat) for point in points)
+        hotel_attrs, bed_types = classify_hotel(record) if category == "hotel" else ([], [])
         places.append(
             Place(
                 id=record.id,
@@ -126,6 +142,8 @@ async def search_places_between(
                     city=city,
                 ),
                 board=_board_tag(record.id, champion_ids, street_ids, select_ids, record.tag),
+                hotel_attrs=hotel_attrs,
+                bed_types=bed_types,
             )
         )
 

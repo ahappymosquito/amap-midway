@@ -1,4 +1,4 @@
-/* 本文件实现多点选址布局、定位按钮、地点历史、扫街榜筛选、路线描边闪烁，以及合计前后两块出行明细样式。 */
+/* 本文件实现多点选址布局、定位按钮、地点历史、扫街榜与酒店属性/床型筛选、路线描边闪烁，以及合计前后两块出行明细样式。 */
 :root {
   --bg: #eef2f6;
   --panel: #ffffff;
@@ -234,12 +234,28 @@ input {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-width: min(360px, calc(100% - 32px));
+  max-width: min(420px, calc(100% - 32px));
+  max-height: min(42dvh, 320px);
+  overflow: auto;
   padding: 8px;
   border: 1px solid rgba(23, 32, 51, 0.12);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: var(--shadow);
+}
+
+.board-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+.board-group-label {
+  width: 100%;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .board-bar[hidden] {
@@ -278,6 +294,50 @@ input {
 .board-chip[data-board="select"].active {
   background: #7c3aed;
   border-color: #7c3aed;
+}
+
+.board-chip[data-hotel-attr="all"].active,
+.board-chip[data-bed-type="all"].active {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.board-chip[data-hotel-attr="hotspring"].active {
+  background: #0f766e;
+  border-color: #0f766e;
+}
+
+.board-chip[data-hotel-attr="esports"].active {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+
+.board-chip[data-hotel-attr="exclusive"].active {
+  background: #be123c;
+  border-color: #be123c;
+}
+
+.board-chip[data-hotel-attr="huazhu"].active {
+  background: #0369a1;
+  border-color: #0369a1;
+}
+
+.board-chip[data-hotel-attr="parent_child"].active {
+  background: #db2777;
+  border-color: #db2777;
+}
+
+.board-chip[data-hotel-attr="homestay"].active {
+  background: #57534e;
+  border-color: #57534e;
+}
+
+.board-chip[data-bed-type="king"].active,
+.board-chip[data-bed-type="twin"].active,
+.board-chip[data-bed-type="family"].active,
+.board-chip[data-bed-type="suite"].active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
 }
 
 .map-legend {
@@ -722,6 +782,13 @@ button:disabled {
   color: #c2410c;
 }
 
+.result-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
 .address,
 .meta,
 .commute-line {
@@ -789,6 +856,25 @@ button:disabled {
   background: #7c3aed;
 }
 
+.map-pin.hotspring {
+  background: #0f766e;
+}
+
+.map-pin.esports {
+  background: #4f46e5;
+}
+
+.map-pin.huazhu {
+  background: #0369a1;
+}
+
+.info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 6px;
+}
+
 .map-pin.over {
   background: #94a3b8;
 }
@@ -823,7 +909,8 @@ button:disabled {
   }
 
   .route-times,
-  .map-legend {
+  .map-legend,
+  .board-bar {
     max-width: calc(100% - 24px);
   }
 

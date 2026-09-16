@@ -41,6 +41,19 @@ class FakeAmapClient:
             return [PoiRecord(id="cheap", name="萨莉亚", lng=116.45, lat=39.98, address="凯德B1", rating="4.8", cost=54)]
         if "烟火" in keywords:
             return [PoiRecord(id="street", name="胡同面馆", lng=116.45, lat=39.98, address="小巷", rating="4.2", cost=28)]
+        if "温泉" in keywords:
+            return [PoiRecord(id="spring-hotel", name="朗丽兹温泉酒店", lng=116.45, lat=39.98, address="小汤山", rating="4.6", cost=480)]
+        if "电竞" in keywords:
+            return [
+                PoiRecord(id="esports-hotel", name="雷神电竞酒店", lng=116.45, lat=39.98, address="望京", rating="4.4", cost=198),
+                PoiRecord(id="esports-decoy", name="顺业精品酒店", lng=116.45, lat=39.98, address="天通苑", rating="4.1", cost=220),
+            ]
+        if "汉庭" in keywords or "全季" in keywords:
+            return [PoiRecord(id="hanting", name="汉庭酒店(望京店)", lng=116.45, lat=39.98, address="望京", rating="4.3", cost=320)]
+        if "大床" in keywords:
+            return [PoiRecord(id="king-hotel", name="雅致大床房酒店", lng=116.45, lat=39.98, address="太阳宫", rating="4.1", cost=260)]
+        if "套房" in keywords:
+            return [PoiRecord(id="suite-hotel", name="望京商务套房酒店", lng=116.45, lat=39.98, address="望京", rating="4.2", cost=520)]
         return []
 
     async def transit_duration(self, origin, destination, city: str) -> int | None:
@@ -158,7 +171,8 @@ def test_places_search_returns_ranked_candidates(client: TestClient) -> None:
     assert payload["people_count"] == 2
     assert payload["origins"][0]["city"] == "北京"
     names = [item["name"] for item in payload["places"]]
-    assert names[0] == "萨莉亚"
+    assert "萨莉亚" in names
+    assert names.index("萨莉亚") < names.index("皇冠假日")
     hotel = next(item for item in payload["places"] if item["name"] == "皇冠假日")
     assert hotel["over_budget"] is True
     assert hotel["commutes"][0]["transit_s"] == 1500
@@ -212,6 +226,29 @@ def test_place_route_returns_polylines(client: TestClient) -> None:
     assert payload["transit_segments"][0]["path"][0] == {"lng": 116.49, "lat": 39.99}
     assert payload["transit_plans"][0]["summary"] == "10号线"
     assert payload["riding_path"][-1] == {"lng": 116.45, "lat": 39.97}
+
+
+def test_hotel_search_marks_attribute_and_bed_filters(client: TestClient) -> None:
+    response = client.post(
+        "/api/places/search",
+        json={
+            "origins": [{"address": "北控水务大厦"}, {"address": "中国黄金大厦"}],
+            "category": "hotel",
+            "people_count": 2,
+            "budget_per_person": 300,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    by_name = {item["name"]: item for item in payload["places"]}
+    assert by_name["朗丽兹温泉酒店"]["hotel_attrs"] == ["hotspring"]
+    assert by_name["雷神电竞酒店"]["hotel_attrs"] == ["esports"]
+    assert by_name["汉庭酒店(望京店)"]["hotel_attrs"] == ["huazhu"]
+    assert by_name["雅致大床房酒店"]["bed_types"] == ["king"]
+    assert by_name["望京商务套房酒店"]["bed_types"] == ["suite"]
+    assert "顺业精品酒店" not in by_name
+    assert "amap.com/ranking/" in payload["amap_ranking_url"]
 
 
 def test_restaurant_search_marks_saojie_boards(client: TestClient) -> None:

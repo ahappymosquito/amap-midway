@@ -1,4 +1,4 @@
-// 本文件实现多点选址交互：网页定位、单起点搜索、地点历史、扫街榜筛选、美团/携程外链、地铁末段出站骑行。
+// 本文件实现多点选址交互：网页定位、单起点搜索、地点历史、扫街榜与酒店属性/床型筛选、美团/携程外链、地铁末段出站骑行。
 const state = {
   map: null,
   originMarkers: [],
@@ -21,6 +21,9 @@ const state = {
   routeCache: {},
   activeRoutes: [],
   boardFilter: "all",
+  hotelAttrFilter: "all",
+  bedTypeFilter: "all",
+  lastCategory: "",
   pulseTimer: null,
   focusedOriginIndex: 0,
   rankingUrl: "",
@@ -50,6 +53,20 @@ const elements = {
   originHistoryBar: document.querySelector("#originHistoryBar"),
 };
 
+const HOTEL_ATTRS = [
+  ["hotspring", "温泉"],
+  ["esports", "电竞"],
+  ["exclusive", "独家"],
+  ["huazhu", "华住会"],
+  ["parent_child", "亲子"],
+  ["homestay", "民宿"],
+];
+const HOTEL_BED_TYPES = [
+  ["king", "大床房"],
+  ["twin", "双床房"],
+  ["family", "家庭房"],
+  ["suite", "套房"],
+];
 const ORIGIN_COLORS = ["#0f766e", "#c2410c", "#7c3aed", "#0369a1", "#b45309", "#be185d"];
 const RECOMMEND_COUNT = 3;
 const MIN_ORIGINS = 1;
@@ -214,6 +231,16 @@ function bindControls() {
   });
   if (elements.boardBar) {
     elements.boardBar.addEventListener("click", (event) => {
+      const attrChip = event.target.closest("[data-hotel-attr]");
+      if (attrChip) {
+        setHotelAttrFilter(attrChip.dataset.hotelAttr);
+        return;
+      }
+      const bedChip = event.target.closest("[data-bed-type]");
+      if (bedChip) {
+        setBedTypeFilter(bedChip.dataset.bedType);
+        return;
+      }
       const chip = event.target.closest("[data-board]");
       if (chip) {
         setBoardFilter(chip.dataset.board);
@@ -620,6 +647,9 @@ async function searchMeet() {
     state.activeRoutes = [];
     state.selectedPlanIndex = {};
     state.boardFilter = "all";
+    state.hotelAttrFilter = "all";
+    state.bedTypeFilter = "all";
+    state.lastCategory = result.category || "";
     state.rankingUrl = result.amap_ranking_url || "";
     persistOriginDraft();
     persistLastForm();
@@ -738,10 +768,23 @@ function renderPlaces() {
 }
 
 function visiblePlaces() {
-  if (state.boardFilter === "all") {
-    return state.places;
+  return state.places.filter((place) => placeMatchesFilters(place));
+}
+
+function placeMatchesFilters(place) {
+  if ((place.category || state.lastCategory) === "hotel") {
+    if (state.hotelAttrFilter !== "all" && !(place.hotel_attrs || []).includes(state.hotelAttrFilter)) {
+      return false;
+    }
+    if (state.bedTypeFilter !== "all" && !(place.bed_types || []).includes(state.bedTypeFilter)) {
+      return false;
+    }
+    return true;
   }
-  return state.places.filter((place) => place.board === state.boardFilter);
+  if (state.boardFilter === "all") {
+    return true;
+  }
+  return place.board === state.boardFilter;
 }
 
 function placePinKind(place) {
@@ -757,6 +800,10 @@ function placePinKind(place) {
   if (place.board === "select") {
     return "select";
   }
+  const hotelAttr = (place.hotel_attrs || [])[0];
+  if (hotelAttr === "hotspring" || hotelAttr === "esports" || hotelAttr === "huazhu") {
+    return hotelAttr;
+  }
   return "place";
 }
 
@@ -765,10 +812,32 @@ function renderBoardBar(category) {
     return;
   }
   const ranking = state.rankingUrl || "https://www.amap.com/ranking/";
-  const rankingLink = `<a class="board-link" href="${escapeHtml(ranking)}" target="_blank" rel="noopener">在高德打开扫街榜</a>`;
   if (category === "hotel") {
+    const rankingLink = `<a class="board-link" href="${escapeHtml(ranking)}" target="_blank" rel="noopener">在高德打开必住榜</a>`;
+    const attrChips = HOTEL_ATTRS.map(([key, label]) => {
+      const count = state.places.filter((item) => (item.hotel_attrs || []).includes(key)).length;
+      const active = state.hotelAttrFilter === key ? " active" : "";
+      return `<button type="button" class="board-chip${active}" data-hotel-attr="${key}">${label} ${count}</button>`;
+    }).join("");
+    const bedChips = HOTEL_BED_TYPES.map(([key, label]) => {
+      const count = state.places.filter((item) => (item.bed_types || []).includes(key)).length;
+      const active = state.bedTypeFilter === key ? " active" : "";
+      return `<button type="button" class="board-chip${active}" data-bed-type="${key}">${label} ${count}</button>`;
+    }).join("");
     elements.boardBar.hidden = false;
-    elements.boardBar.innerHTML = rankingLink;
+    elements.boardBar.innerHTML = `
+      <div class="board-group">
+        <span class="board-group-label">酒店属性</span>
+        <button type="button" class="board-chip${state.hotelAttrFilter === "all" ? " active" : ""}" data-hotel-attr="all">全部</button>
+        ${attrChips}
+      </div>
+      <div class="board-group">
+        <span class="board-group-label">一级床型</span>
+        <button type="button" class="board-chip${state.bedTypeFilter === "all" ? " active" : ""}" data-bed-type="all">不限</button>
+        ${bedChips}
+      </div>
+      ${rankingLink}
+    `;
     return;
   }
   if (category !== "restaurant") {
@@ -776,6 +845,7 @@ function renderBoardBar(category) {
     elements.boardBar.innerHTML = "";
     return;
   }
+  const rankingLink = `<a class="board-link" href="${escapeHtml(ranking)}" target="_blank" rel="noopener">在高德打开扫街榜</a>`;
   const championCount = state.places.filter((item) => item.board === "champion").length;
   const streetCount = state.places.filter((item) => item.board === "street").length;
   const selectCount = state.places.filter((item) => item.board === "select").length;
@@ -791,14 +861,26 @@ function renderBoardBar(category) {
 
 function setBoardFilter(board) {
   state.boardFilter = board || "all";
-  renderBoardBar("restaurant");
+  renderBoardBar(state.lastCategory || "restaurant");
+  renderPlaces();
+}
+
+function setHotelAttrFilter(value) {
+  state.hotelAttrFilter = value || "all";
+  renderBoardBar("hotel");
+  renderPlaces();
+}
+
+function setBedTypeFilter(value) {
+  state.bedTypeFilter = value || "all";
+  renderBoardBar("hotel");
   renderPlaces();
 }
 
 function applyBoardVisibility() {
   state.markers.forEach((marker, index) => {
     const place = state.places[index];
-    const show = state.boardFilter === "all" || place?.board === state.boardFilter;
+    const show = placeMatchesFilters(place || {});
     if (show) {
       marker.show?.();
     } else {
@@ -817,14 +899,7 @@ function placeItem(place, index) {
   item.tabIndex = 0;
   item.dataset.id = place.id;
   const costLabel = "人均";
-  const boardBadge =
-    place.board === "champion"
-      ? `<span class="badge">状元榜</span>`
-      : place.board === "street"
-        ? `<span class="badge">烟火小店</span>`
-        : place.board === "select"
-          ? `<span class="badge">极致甄选</span>`
-          : "";
+  const boardBadge = filterBadges(place);
   const badge = place.over_budget
     ? `<span class="badge warn">超差标</span>`
     : place.budget_unknown
@@ -839,7 +914,7 @@ function placeItem(place, index) {
   item.innerHTML = `
     <div class="result-title">
       <span>${index + 1}. ${escapeHtml(place.name)}</span>
-      ${boardBadge}${badge}
+      <span class="result-badges">${boardBadge}${badge}</span>
     </div>
     <div class="address">${escapeHtml(place.address || "暂无详细地址")}</div>
     <div class="meta">${place.rating ? `评分 ${escapeHtml(place.rating)}` : "暂无评分"}${costMeta}</div>
@@ -853,6 +928,30 @@ function placeItem(place, index) {
     selectPlace(place.id);
   });
   return item;
+}
+
+function filterBadges(place) {
+  if (place.board === "champion") {
+    return `<span class="badge">状元榜</span>`;
+  }
+  if (place.board === "street") {
+    return `<span class="badge">烟火小店</span>`;
+  }
+  if (place.board === "select") {
+    return `<span class="badge">极致甄选</span>`;
+  }
+  const labels = [];
+  for (const [key, label] of HOTEL_ATTRS) {
+    if ((place.hotel_attrs || []).includes(key)) {
+      labels.push(label);
+    }
+  }
+  for (const [key, label] of HOTEL_BED_TYPES) {
+    if ((place.bed_types || []).includes(key)) {
+      labels.push(label);
+    }
+  }
+  return labels.slice(0, 3).map((label) => `<span class="badge">${escapeHtml(label)}</span>`).join("");
 }
 
 function isDesktop() {
@@ -894,9 +993,11 @@ async function selectPlace(id) {
   document.querySelectorAll(".result-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.id === id);
   });
+  const tags = filterBadges(place);
   state.infoWindow.setContent(`
     <div class="info-card">
       <strong>${escapeHtml(place.name)}</strong>
+      ${tags ? `<div class="info-tags">${tags}</div>` : ""}
       <div>${escapeHtml(place.address || "暂无详细地址")}</div>
       <div class="open-links">${renderOpenLinks(place)}</div>
     </div>
