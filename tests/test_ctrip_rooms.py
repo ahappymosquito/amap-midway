@@ -8,7 +8,7 @@ import pytest
 import respx
 
 from app import ctrip_rooms
-from app.ctrip_rooms import COMMENT_URL, SEARCH_URL, lookup_hotel_rooms
+from app.ctrip_rooms import COMMENT_URL, SEARCH_URL, _best_match, lookup_hotel_rooms
 
 
 @pytest.fixture(autouse=True)
@@ -63,3 +63,14 @@ async def test_lookup_returns_empty_when_ctrip_blocked() -> None:
 
     assert rooms == []
     assert beds == []
+
+
+def test_best_match_rejects_loose_mall_name() -> None:
+    results = [
+        {"id": "1", "type": "Hotel", "word": "海友酒店(北京望京SOHO新荟城店)", "cityId": 1},
+        {"id": "2", "type": "Hotel", "word": "全季酒店(北京望京店)", "cityId": 1},
+    ]
+    assert _best_match(results, "新荟城店(北京)", 1) is None
+    matched = _best_match(results, "全季酒店(北京望京SOHO店)", 1)
+    assert matched is not None
+    assert matched["id"] == "2"

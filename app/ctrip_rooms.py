@@ -131,9 +131,46 @@ def _best_match(results: list[Any], name: str, city_id: int) -> dict[str, Any] |
     for item in same_city:
         if str(item.get("word") or "") == name:
             return item
-    compact = name.replace(" ", "")
     for item in same_city:
-        word = str(item.get("word") or "").replace(" ", "")
-        if compact and (compact in word or word in compact):
+        if _names_close(name, str(item.get("word") or "")):
             return item
-    return same_city[0] if same_city else None
+    return None
+
+
+def _names_close(amap_name: str, ctrip_name: str) -> bool:
+    left = amap_name.replace(" ", "")
+    right = ctrip_name.replace(" ", "")
+    if len(left) >= 8 and len(right) >= 8 and (left in right or right in left):
+        return True
+    overlap = _token_overlap(_significant_tokens(amap_name), _significant_tokens(ctrip_name))
+    if overlap >= 2:
+        return True
+    return False
+
+
+def _token_overlap(left: set[str], right: set[str]) -> int:
+    used: set[str] = set()
+    count = 0
+    for token in left:
+        for other in right:
+            if other in used:
+                continue
+            if token == other or (len(token) >= 2 and len(other) >= 2 and (token in other or other in token)):
+                used.add(other)
+                count += 1
+                break
+    return count
+
+
+def _significant_tokens(name: str) -> set[str]:
+    cleaned = name
+    for sep in "()（）[]【】·-/ ":
+        cleaned = cleaned.replace(sep, " ")
+    stop = {"北京", "上海", "广州", "深圳", "杭州", "成都", "酒店", "饭店", "宾馆", "中国", "店"}
+    tokens: set[str] = set()
+    for part in cleaned.split():
+        if part.endswith("店") and len(part) > 2:
+            part = part[:-1]
+        if len(part) >= 2 and part not in stop:
+            tokens.add(part)
+    return tokens
