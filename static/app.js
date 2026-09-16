@@ -1,4 +1,4 @@
-// 本文件实现多点选址交互：网页定位、单起点搜索、地点历史、扫街榜与酒店属性/床型筛选、美团/携程外链、地铁末段出站骑行。
+// 本文件实现多点选址交互：网页定位、单起点搜索、地点历史、扫街榜与酒店属性/携程房型筛选、美团/携程外链、地铁末段出站骑行。
 const state = {
   map: null,
   originMarkers: [],
@@ -832,7 +832,7 @@ function renderBoardBar(category) {
         ${attrChips}
       </div>
       <div class="board-group">
-        <span class="board-group-label">一级床型</span>
+        <span class="board-group-label">一级床型（携程该店）</span>
         <button type="button" class="board-chip${state.bedTypeFilter === "all" ? " active" : ""}" data-bed-type="all">不限</button>
         ${bedChips}
       </div>
@@ -911,6 +911,8 @@ function placeItem(place, index) {
     })
     .join("");
   const costMeta = place.cost ? ` · ${costLabel} ¥${place.cost}` : place.category === "restaurant" ? " · 暂无人均" : " · 暂无人均";
+  const saleRooms = (place.sale_rooms || []).slice(0, 4).map((name) => escapeHtml(name)).join("、");
+  const saleLine = saleRooms ? `<div class="meta">携程房型 ${saleRooms}</div>` : "";
   item.innerHTML = `
     <div class="result-title">
       <span>${index + 1}. ${escapeHtml(place.name)}</span>
@@ -918,6 +920,7 @@ function placeItem(place, index) {
     </div>
     <div class="address">${escapeHtml(place.address || "暂无详细地址")}</div>
     <div class="meta">${place.rating ? `评分 ${escapeHtml(place.rating)}` : "暂无评分"}${costMeta}</div>
+    ${saleLine}
     ${commuteLines}
     <div class="open-links">${renderOpenLinks(place)}</div>
   `;

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 from app.routers.geocode import get_amap_client
-from app.schemas import Community, LocationResponse, PoiRecord
+from app.schemas import Community, LocationResponse, Place, PoiRecord
 from app.settings import Settings, get_settings
 
 
@@ -50,10 +50,6 @@ class FakeAmapClient:
             ]
         if "汉庭" in keywords or "全季" in keywords:
             return [PoiRecord(id="hanting", name="汉庭酒店(望京店)", lng=116.45, lat=39.98, address="望京", rating="4.3", cost=320)]
-        if "大床" in keywords:
-            return [PoiRecord(id="king-hotel", name="雅致大床房酒店", lng=116.45, lat=39.98, address="太阳宫", rating="4.1", cost=260)]
-        if "套房" in keywords:
-            return [PoiRecord(id="suite-hotel", name="望京商务套房酒店", lng=116.45, lat=39.98, address="望京", rating="4.2", cost=520)]
         return []
 
     async def transit_duration(self, origin, destination, city: str) -> int | None:
@@ -142,6 +138,17 @@ class FakeAmapClient:
         measure_type: int,
     ) -> list[int | None]:
         return [900 + index * 60 for index in range(len(origins))]
+
+
+@pytest.fixture(autouse=True)
+def stub_ctrip_rooms(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_attach(places: list[Place], city: str) -> None:
+        for place in places:
+            if place.name == "汉庭酒店(望京店)":
+                place.sale_rooms = ["高级大床房", "高级双床房"]
+                place.bed_types = ["king", "twin"]
+
+    monkeypatch.setattr("app.places.attach_ctrip_bed_types", fake_attach)
 
 
 @pytest.fixture
@@ -245,8 +252,8 @@ def test_hotel_search_marks_attribute_and_bed_filters(client: TestClient) -> Non
     assert by_name["朗丽兹温泉酒店"]["hotel_attrs"] == ["hotspring"]
     assert by_name["雷神电竞酒店"]["hotel_attrs"] == ["esports"]
     assert by_name["汉庭酒店(望京店)"]["hotel_attrs"] == ["huazhu"]
-    assert by_name["雅致大床房酒店"]["bed_types"] == ["king"]
-    assert by_name["望京商务套房酒店"]["bed_types"] == ["suite"]
+    assert by_name["汉庭酒店(望京店)"]["bed_types"] == ["king", "twin"]
+    assert by_name["汉庭酒店(望京店)"]["sale_rooms"] == ["高级大床房", "高级双床房"]
     assert "顺业精品酒店" not in by_name
     assert "amap.com/ranking/" in payload["amap_ranking_url"]
 

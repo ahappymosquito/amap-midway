@@ -3,7 +3,7 @@
 本文件验证温泉、电竞、独家、华住会等标签和一级床型只按店名/标签命中，不把无关关键词结果算进去。
 """
 
-from app.hotel_filters import classify_hotel, hotel_has_filter_signal
+from app.hotel_filters import classify_bed_types, classify_hotel, hotel_has_filter_signal
 from app.schemas import PoiRecord
 
 
@@ -20,13 +20,17 @@ def test_classify_hotspring_esports_exclusive_and_huazhu() -> None:
     assert classify_hotel(_record("全季酒店(北京昌平小汤山温泉度假区店)"))[0] == ["hotspring", "huazhu"]
 
 
-def test_classify_parent_child_homestay_and_bed_types() -> None:
+def test_classify_parent_child_homestay_without_name_based_beds() -> None:
     assert classify_hotel(_record("亲子主题民宿")) == (["parent_child", "homestay"], [])
-    assert classify_hotel(_record("亲子房民宿")) == (["parent_child", "homestay"], ["family"])
-    assert classify_hotel(_record("雅致大床房酒店"))[1] == ["king"]
-    assert classify_hotel(_record("商务双床房酒店"))[1] == ["twin"]
-    assert classify_hotel(_record("望京商务套房酒店"))[1] == ["suite"]
+    assert classify_hotel(_record("亲子房民宿")) == (["parent_child", "homestay"], [])
+    assert classify_hotel(_record("雅致大床房酒店")) == ([], [])
     assert classify_hotel(_record("皇冠假日")) == ([], [])
+
+
+def test_classify_bed_types_from_ctrip_room_names() -> None:
+    assert classify_bed_types(["高级大床房（好眠床垫）", "高级双床房"]) == ["king", "twin"]
+    assert classify_bed_types(["亲子房", "家庭套房"]) == ["family", "suite"]
+    assert classify_bed_types(["榻榻米房"]) == []
 
 
 def test_unrelated_keyword_hit_is_not_a_filter_signal() -> None:

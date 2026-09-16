@@ -144,7 +144,7 @@ class OriginRoutes(BaseModel):
 
 
 class Place(BaseModel):
-    """多点选址候选餐馆或酒店，酒店可带属性与一级床型标签。"""
+    """多点选址候选餐馆或酒店，酒店可带属性、携程房型与一级床型标签。"""
 
     id: str
     name: str
@@ -163,6 +163,7 @@ class Place(BaseModel):
     board: str | None = None
     hotel_attrs: list[str] = Field(default_factory=list)
     bed_types: list[str] = Field(default_factory=list)
+    sale_rooms: list[str] = Field(default_factory=list)
 
 
 class MetroLine(BaseModel):

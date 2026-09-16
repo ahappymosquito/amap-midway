@@ -1,6 +1,6 @@
 """多点选址业务模块。
 
-本文件根据一个或多个通勤点搜索附近或中间区域的餐馆或酒店，按真实地铁时长排序；餐馆叠加扫街榜可视化，酒店叠加属性与一级床型关键词筛选。
+本文件根据一个或多个通勤点搜索附近或中间区域的餐馆或酒店，按真实地铁时长排序；餐馆叠加扫街榜可视化，酒店叠加属性筛选并用携程该店房型补一级床型。
 """
 
 import asyncio
@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 from app.amap_client import AmapClient
 from app.budget import couple_budget, is_over_budget
 from app.distance import centroid, haversine_distance_m, search_radius_from_points
+from app.ctrip_rooms import attach_ctrip_bed_types
 from app.hotel_filters import HOTEL_PLACE_TYPE, HOTEL_TEXT_QUERIES, classify_hotel, hotel_has_filter_signal
 from app.metro import parse_all_transit_plans, parse_riding_payload, select_metro_stations, to_metro_station
 from app.open_links import amap_ranking_url, build_open_links
@@ -148,6 +149,8 @@ async def search_places_between(
         )
 
     places.sort(key=lambda item: (item.over_budget, item.fairness_s, item.name))
+    if category == "hotel":
+        await attach_ctrip_bed_types(places, city)
     for place in places[:PREPLAN_COUNT]:
         place.origin_routes = _origin_routes_from_payloads(payload_by_id.get(place.id), len(points))
     return PlacesSearchResponse(
