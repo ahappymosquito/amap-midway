@@ -1,4 +1,4 @@
-// 本文件实现多点选址交互：网页定位、地点批量导入、按通勤时间或绝对距离比较、扫街榜六类选址。
+// 本文件实现多点选址交互：网页定位、地名候选提示、地点批量导入、按通勤时间或绝对距离比较、扫街榜六类选址。
 const state = {
   map: null,
   originMarkers: [],
@@ -30,6 +30,10 @@ const state = {
   pulseTimer: null,
   focusedOriginIndex: 0,
   rankingUrl: "",
+  suggestTimer: null,
+  suggestInput: null,
+  suggestItems: [],
+  suggestIndex: -1,
 };
 
 const elements = {
@@ -291,6 +295,11 @@ function bindControls() {
       }
     });
   }
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".origin-suggest-wrap")) {
+      hidePlaceSuggest();
+    }
+  });
 }
 
 function readOriginRows() {
@@ -308,6 +317,7 @@ function originRowFromInput(input) {
 }
 
 function renderOriginInputs(presetRows) {
+  hidePlaceSuggest();
   const previous = Array.isArray(presetRows) ? presetRows : readOriginRows();
   elements.originsList.innerHTML = "";
   for (let index = 0; index < state.originCount; index += 1) {
@@ -318,7 +328,10 @@ function renderOriginInputs(presetRows) {
     label.innerHTML = `
       地点 ${letter}
       <span class="origin-row">
-        <input type="text" name="origin-${letter}" data-origin-index="${index}" list="originHistory" autocomplete="on" placeholder="${placeholder}" />
+        <span class="origin-suggest-wrap">
+          <input type="text" name="origin-${letter}" data-origin-index="${index}" autocomplete="off" placeholder="${placeholder}" />
+          <ul class="origin-suggest" hidden></ul>
+        </span>
         ${canRemove ? `<button type="button" class="remove-origin" data-remove-index="${index}">删除</button>` : ""}
       </span>
     `;
@@ -333,6 +346,7 @@ function renderOriginInputs(presetRows) {
       delete input.dataset.lng;
       delete input.dataset.lat;
       persistOriginDraft();
+      schedulePlaceSuggest(input);
     });
     input.addEventListener("change", () => {
       persistOriginDraft();
@@ -340,6 +354,10 @@ function renderOriginInputs(presetRows) {
     });
     input.addEventListener("focus", () => {
       state.focusedOriginIndex = index;
+      schedulePlaceSuggest(input);
+    });
+    input.addEventListener("keydown", (event) => {
+      handleSuggestKeydown(event, input);
     });
     input.addEventListener("paste", (event) => {
       const text = event.clipboardData?.getData("text") || "";
@@ -2104,6 +2122,127 @@ function clearMetroNetwork() {
   state.metroMarkers = [];
 }
 
+function schedulePlaceSuggest(input) {
+  window.clearTimeout(state.suggestTimer);
+  const query = input.value.trim();
+  if (query.length < 2 || query.includes("；") || query.includes(";")) {
+    hidePlaceSuggest();
+    return;
+  }
+  state.suggestTimer = window.setTimeout(() => {
+    loadPlaceSuggest(input, query);
+  }, 280);
+}
+
+async function loadPlaceSuggest(input, query) {
+  try {
+    const city = encodeURIComponent(state.origins[0]?.city || "");
+    const payload = await fetchJson(`/api/geocode/suggest?q=${encodeURIComponent(query)}&city=${city}`);
+    if (input.value.trim() !== query) {
+      return;
+    }
+    renderPlaceSuggest(input, payload.tips || []);
+  } catch (error) {
+    hidePlaceSuggest();
+  }
+}
+
+function renderPlaceSuggest(input, tips) {
+  const list = input.parentElement?.querySelector(".origin-suggest");
+  if (!list) {
+    return;
+  }
+  state.suggestInput = input;
+  state.suggestItems = tips;
+  state.suggestIndex = tips.length ? 0 : -1;
+  if (!tips.length) {
+    list.hidden = true;
+    list.innerHTML = "";
+    return;
+  }
+  list.hidden = false;
+  list.innerHTML = tips
+    .map((tip, index) => {
+      const addr = [tip.district, tip.address].filter(Boolean).join(" ");
+      return `<li>
+        <button type="button" class="suggest-item${index === 0 ? " active" : ""}" data-suggest-index="${index}">
+          <span class="tip-name">${escapeHtml(tip.name)}</span>
+          ${addr ? `<span class="tip-addr">${escapeHtml(addr)}</span>` : ""}
+        </button>
+      </li>`;
+    })
+    .join("");
+  list.querySelectorAll("[data-suggest-index]").forEach((button) => {
+    button.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+      pickPlaceSuggest(input, Number(button.dataset.suggestIndex));
+    });
+  });
+}
+
+function handleSuggestKeydown(event, input) {
+  if (!state.suggestItems.length || state.suggestInput !== input) {
+    if (event.key === "Escape") {
+      hidePlaceSuggest();
+    }
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    state.suggestIndex = (state.suggestIndex + 1) % state.suggestItems.length;
+    highlightSuggest();
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    state.suggestIndex = (state.suggestIndex - 1 + state.suggestItems.length) % state.suggestItems.length;
+    highlightSuggest();
+    return;
+  }
+  if (event.key === "Enter" && state.suggestIndex >= 0) {
+    event.preventDefault();
+    pickPlaceSuggest(input, state.suggestIndex);
+    return;
+  }
+  if (event.key === "Escape") {
+    hidePlaceSuggest();
+  }
+}
+
+function highlightSuggest() {
+  const list = state.suggestInput?.parentElement?.querySelector(".origin-suggest");
+  if (!list) {
+    return;
+  }
+  list.querySelectorAll("[data-suggest-index]").forEach((button) => {
+    button.classList.toggle("active", Number(button.dataset.suggestIndex) === state.suggestIndex);
+  });
+}
+
+function pickPlaceSuggest(input, index) {
+  const tip = state.suggestItems[index];
+  if (!tip) {
+    return;
+  }
+  input.value = tip.name;
+  input.dataset.lng = String(tip.lng);
+  input.dataset.lat = String(tip.lat);
+  persistOriginDraft();
+  rememberOriginHistory([tip.name]);
+  hidePlaceSuggest();
+}
+
+function hidePlaceSuggest() {
+  window.clearTimeout(state.suggestTimer);
+  document.querySelectorAll(".origin-suggest").forEach((list) => {
+    list.hidden = true;
+    list.innerHTML = "";
+  });
+  state.suggestInput = null;
+  state.suggestItems = [];
+  state.suggestIndex = -1;
+}
+
 function getCategory() {
   return document.querySelector('input[name="category"]:checked')?.value || "restaurant";
 }
@@ -2163,6 +2302,7 @@ function applyImportedNames(names) {
   renderOriginInputs(used.map((address) => ({ address })));
   persistOriginDraft();
   rememberOriginHistory(used);
+  hidePlaceSuggest();
   if (elements.importPanel) {
     elements.importPanel.hidden = true;
   }

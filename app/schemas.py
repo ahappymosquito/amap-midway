@@ -27,6 +27,23 @@ class LocationResponse(BaseModel):
     city: str = ""
 
 
+class PlaceTip(BaseModel):
+    """地名输入提示中的一条候选。"""
+
+    id: str = ""
+    name: str
+    address: str = ""
+    district: str = ""
+    lng: float
+    lat: float
+
+
+class PlaceTipsResponse(BaseModel):
+    """地名候选列表。"""
+
+    tips: list[PlaceTip]
+
+
 class Community(BaseModel):
     """住宅小区 POI 信息。"""
 

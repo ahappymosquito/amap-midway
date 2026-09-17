@@ -10,13 +10,25 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 from app.routers.geocode import get_amap_client
-from app.schemas import Community
+from app.schemas import Community, PlaceTip
 from app.settings import Settings, get_settings
 
 
 class FakeAmapClient:
     async def geocode(self, address: str, city: str = ""):
         return {"lng": 121.475, "lat": 31.229, "formatted_address": address, "city": city or "上海市"}
+
+    async def input_tips(self, keywords: str, city: str = "") -> list[PlaceTip]:
+        return [
+            PlaceTip(
+                id="poi-soho",
+                name="望京SOHO",
+                address="望京街10号",
+                district="北京市朝阳区",
+                lng=116.481,
+                lat=39.996,
+            )
+        ]
 
     async def search_communities(self, lng: float, lat: float, radius: int) -> list[Community]:
         return [
@@ -39,6 +51,15 @@ def client() -> AsyncIterator[TestClient]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+def test_geocode_suggest_returns_tips(client: TestClient) -> None:
+    response = client.get("/api/geocode/suggest", params={"q": "望京"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["tips"][0]["name"] == "望京SOHO"
+    assert payload["tips"][0]["lng"] == 116.481
 
 
 def test_config_returns_key_status(client: TestClient) -> None:

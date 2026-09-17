@@ -1,4 +1,4 @@
-/* 本文件实现多点选址布局、地点导入、通勤/距离比较、扫街榜六类选项和路线描边闪烁样式。 */
+/* 本文件实现多点选址布局、地名候选、地点导入、通勤/距离比较、扫街榜六类选项和路线描边闪烁样式。 */
 :root {
   --bg: #eef2f6;
   --panel: #ffffff;
@@ -500,6 +500,63 @@ input {
   grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: center;
+}
+
+.origin-suggest-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.origin-suggest {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  max-height: 240px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  list-style: none;
+}
+
+.origin-suggest[hidden] {
+  display: none;
+}
+
+.origin-suggest li {
+  margin: 0;
+}
+
+.origin-suggest .suggest-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+
+.origin-suggest .suggest-item.active,
+.origin-suggest .suggest-item:hover {
+  background: #f0fdfa;
+}
+
+.origin-suggest .tip-name {
+  font-weight: 700;
+}
+
+.origin-suggest .tip-addr {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .remove-origin {

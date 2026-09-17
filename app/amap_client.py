@@ -1,6 +1,6 @@
 """高德 Web 服务客户端模块。
 
-本文件封装高德地理编码、逆地理、周边 POI/地铁站搜索、关键词补召、公交与骑行规划，并把高德响应转换为应用内部可用的结构。
+本文件封装高德地理编码、输入提示、逆地理、周边 POI/地铁站搜索、关键词补召、公交与骑行规划。
 """
 
 from typing import Any
@@ -10,7 +10,7 @@ from fastapi import HTTPException, status
 
 from app.distance import haversine_distance_m
 from app.ranking import PLACE_TYPES
-from app.schemas import Community, LocationResponse, PlaceCategory, PoiRecord
+from app.schemas import Community, LocationResponse, PlaceCategory, PlaceTip, PoiRecord
 from app.settings import Settings
 
 SKIP_NAME_MARKERS = ("医院", "食堂", "社区餐厅", "宴会厅", "停车场")
@@ -104,6 +104,49 @@ class AmapClient:
             formatted_address=record.name if not record.address else f"{record.name}（{record.address}）",
             city=city or poi_city,
         )
+
+    async def input_tips(self, keywords: str, city: str = "") -> list[PlaceTip]:
+        """按正在输入的地名返回带坐标的候选地点，供输入框点选。"""
+
+        query = keywords.strip()
+        if not query:
+            return []
+        params: dict[str, Any] = {"keywords": query, "datatype": "poi"}
+        if city.strip():
+            params["city"] = city.strip()
+        payload = await self._get("/assistant/inputtips", params)
+        tips: list[PlaceTip] = []
+        seen: set[str] = set()
+        for item in payload.get("tips") or []:
+            location = _string_or_empty(item.get("location"))
+            if "," not in location:
+                continue
+            lng_text, lat_text = location.split(",", maxsplit=1)
+            try:
+                lng = float(lng_text)
+                lat = float(lat_text)
+            except ValueError:
+                continue
+            name = _string_or_empty(item.get("name"))
+            if not name:
+                continue
+            tip_id = _string_or_empty(item.get("id")) or f"{lng},{lat}"
+            if tip_id in seen:
+                continue
+            seen.add(tip_id)
+            tips.append(
+                PlaceTip(
+                    id=tip_id,
+                    name=name,
+                    address=_string_or_empty(item.get("address")),
+                    district=_string_or_empty(item.get("district")),
+                    lng=lng,
+                    lat=lat,
+                )
+            )
+            if len(tips) >= 8:
+                break
+        return tips
 
     async def reverse_geocode(self, lng: float, lat: float) -> LocationResponse:
         """把坐标反解为地址和城市，供定位点和坐标起点使用。"""

@@ -14,6 +14,36 @@ from app.settings import Settings
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_input_tips_returns_located_places() -> None:
+    respx.get("https://restapi.amap.com/v3/assistant/inputtips").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "status": "1",
+                "tips": [
+                    {
+                        "id": "B000A7BD6C",
+                        "name": "望京SOHO",
+                        "district": "北京市朝阳区",
+                        "address": "望京街10号",
+                        "location": "116.481,39.996",
+                    },
+                    {"id": "X", "name": "望京公交站", "location": []},
+                ],
+            },
+        )
+    )
+    client = AmapClient(Settings(AMAP_WEB_KEY="test-key"))
+
+    tips = await client.input_tips("望京", city="北京")
+
+    assert [item.name for item in tips] == ["望京SOHO"]
+    assert tips[0].lng == 116.481
+    assert tips[0].district == "北京市朝阳区"
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_geocode_success() -> None:
     respx.get("https://restapi.amap.com/v3/place/text").mock(
         return_value=httpx.Response(200, json={"status": "1", "pois": []})
