@@ -1,6 +1,6 @@
 """多点选址业务模块。
 
-本文件根据一个或多个通勤点搜索附近美食、酒店、玩乐、咖啡、酒吧或景点，按真实地铁时长排序；叠加扫街榜分类，并给出附近搭配推荐。
+本文件根据一个或多个通勤点搜索附近美食、酒店、玩乐、咖啡、酒吧或景点，可按地铁通勤时间或直线距离排序；叠加扫街榜分类，并给出附近搭配推荐。
 """
 
 import asyncio
@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 
 from app.amap_client import AmapClient
 from app.budget import couple_budget, is_over_budget
-from app.distance import centroid, haversine_distance_m, search_radius_from_points
+from app.distance import clamp_search_radius, centroid, haversine_distance_m, search_radius_from_points
 from app.ctrip_rooms import attach_ctrip_bed_types
 from app.hotel_filters import HOTEL_PLACE_TYPE, HOTEL_TEXT_QUERIES, classify_hotel, hotel_has_filter_signal
 from app.metro import parse_all_transit_plans, parse_riding_payload, select_metro_stations, to_metro_station
@@ -33,6 +33,7 @@ from app.schemas import (
     PlaceCategory,
     PlacesSearchResponse,
     PoiRecord,
+    SortBy,
 )
 
 TRANSIT_RANK_LIMIT = 8
@@ -48,6 +49,9 @@ async def search_places_between(
     budget_per_person: int,
     people_count: int,
     city: str = "",
+    sort_by: SortBy = "transit",
+    radius_m: int | None = None,
+    max_transit_min: int | None = None,
 ) -> PlacesSearchResponse:
     """搜索一个或多个通勤点附近/之间的候选地点。城市由第一个可解析地点推断。"""
 
@@ -58,7 +62,7 @@ async def search_places_between(
 
     coords = [(item.lng, item.lat) for item in points]
     mid_lng, mid_lat = centroid(coords)
-    radius = search_radius_from_points(coords)
+    radius = clamp_search_radius(radius_m) if radius_m is not None else search_radius_from_points(coords)
     around_task = client.search_around_pois(mid_lng, mid_lat, radius, category)
     hotel_extras: list[PoiRecord] = []
     companion_cat = companion_category(category)
@@ -153,6 +157,7 @@ async def search_places_between(
                 cost=record.cost,
                 commutes=commutes,
                 fairness_s=_fairness_seconds(commutes, farthest),
+                distance_m=farthest,
                 over_budget=is_over_budget(category, record.cost, budget_per_person, people_count),
                 budget_unknown=record.cost is None,
                 open_links=build_open_links(
@@ -169,7 +174,13 @@ async def search_places_between(
             )
         )
 
-    places.sort(key=lambda item: (item.over_budget, item.fairness_s, item.name))
+    if max_transit_min:
+        limit_s = max_transit_min * 60
+        places = [item for item in places if _within_transit_limit(item.commutes, limit_s)]
+    if sort_by == "distance":
+        places.sort(key=lambda item: (item.over_budget, item.distance_m, item.name))
+    else:
+        places.sort(key=lambda item: (item.over_budget, item.fairness_s, item.name))
     if category == "hotel":
         await attach_ctrip_bed_types(places, city)
     for place in places[:PREPLAN_COUNT]:
@@ -201,6 +212,7 @@ async def search_places_between(
         amap_ranking_url=amap_ranking_url(city, ranking_kind_for(category)),
         companions=companions,
         companion_category=companion_cat or "",
+        sort_by=sort_by,
     )
 
 
@@ -371,6 +383,7 @@ def _companion_places(
                 cost=record.cost,
                 commutes=[CommuteTimes() for _ in points],
                 fairness_s=farthest,
+                distance_m=farthest,
                 over_budget=is_over_budget(category, record.cost, budget_per_person, people_count),
                 budget_unknown=record.cost is None,
                 open_links=build_open_links(
@@ -404,6 +417,15 @@ def _board_tag(
     if category == "restaurant" and (place_id in select_ids or "甄选" in text):
         return "select"
     return None
+
+
+def _within_transit_limit(commutes: list[CommuteTimes], limit_s: int) -> bool:
+    """已知地铁时长时，最慢一侧不超过上限才保留。"""
+
+    known = [item.transit_s for item in commutes if item.transit_s is not None]
+    if not known:
+        return True
+    return max(known) <= limit_s
 
 
 def _fairness_seconds(commutes: list[CommuteTimes], fallback_m: int) -> int:

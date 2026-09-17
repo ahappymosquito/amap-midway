@@ -3,7 +3,7 @@
 本文件验证经纬度球面直线距离和单点/多点搜索半径，确保附近搜索范围可信。
 """
 
-from app.distance import haversine_distance_m, search_radius_from_points
+from app.distance import clamp_search_radius, haversine_distance_m, search_radius_from_points
 
 
 def test_haversine_distance_same_point_is_zero() -> None:
@@ -18,3 +18,9 @@ def test_haversine_distance_for_one_latitude_degree() -> None:
 
 def test_search_radius_single_point_uses_minimum() -> None:
     assert search_radius_from_points([(116.48, 39.99)]) == 1500
+
+
+def test_clamp_search_radius() -> None:
+    assert clamp_search_radius(100) == 1500
+    assert clamp_search_radius(3000) == 3000
+    assert clamp_search_radius(20000) == 8000

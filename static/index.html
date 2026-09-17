@@ -1,11 +1,11 @@
-<!-- 本文件实现多点选址单页：网页定位、扫街榜六类选址、附近玩乐/美食搭配、酒店属性与携程房型筛选。 -->
+<!-- 本文件实现多点选址单页：网页定位、地点批量导入、按通勤时间或绝对距离比较、扫街榜六类选址。 -->
 <!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>多点选址 · 餐馆酒店</title>
-    <link rel="stylesheet" href="/static/styles.css?v=0113" />
+    <link rel="stylesheet" href="/static/styles.css?v=0114" />
   </head>
   <body>
     <main class="app-shell">
@@ -23,7 +23,7 @@
       <aside class="control-panel" aria-label="搜索控制面板">
         <header class="panel-header">
           <h1>多点选址</h1>
-          <p>按真实地铁时间比较美食、酒店、玩乐、咖啡、酒吧和景点。一个地点即可搜附近，也可以再加其他人的地点。搜完会附带附近搭配推荐。</p>
+          <p>可按地铁通勤时间或直线距离比较。地点可逐个填写，也可分行或用分号批量导入。搜完会附带附近搭配推荐。</p>
         </header>
 
         <form id="meetForm" class="search-form">
@@ -33,6 +33,15 @@
           <div class="origin-actions">
             <button id="locateButton" type="button">使用当前位置</button>
             <button id="addOriginButton" type="button">添加地点</button>
+            <button id="importOriginButton" type="button">导入地点</button>
+          </div>
+          <div id="importPanel" class="import-panel" hidden>
+            <label>
+              批量地点
+              <textarea id="importOrigins" rows="4" placeholder="每行一个，也可用分号隔开：&#10;望京SOHO&#10;北控水务大厦；中国黄金大厦"></textarea>
+            </label>
+            <button id="applyImportButton" type="button">填入地点</button>
+            <p class="hint">最多 6 个。换行或分号（；或 ;）隔开。在地点框里直接粘贴名单也可以。</p>
           </div>
 
           <fieldset>
@@ -58,6 +67,34 @@
             </label>
           </div>
           <p class="hint" id="budgetHint">按餐馆人均比较。无人均则请到美团/点评核价。</p>
+
+          <fieldset>
+            <legend>怎么比</legend>
+            <div class="choice-row two">
+              <label><input type="radio" name="sortBy" value="transit" checked /> 通勤时间</label>
+              <label><input type="radio" name="sortBy" value="distance" /> 绝对距离</label>
+            </div>
+            <p class="hint" id="sortHint">按最慢一侧地铁时长排序。可设通勤上限。</p>
+          </fieldset>
+          <fieldset id="transitLimitField">
+            <legend>通勤上限</legend>
+            <div class="choice-row">
+              <label><input type="radio" name="maxTransit" value="0" checked /> 不限</label>
+              <label><input type="radio" name="maxTransit" value="20" /> 20分</label>
+              <label><input type="radio" name="maxTransit" value="30" /> 30分</label>
+              <label><input type="radio" name="maxTransit" value="45" /> 45分</label>
+              <label><input type="radio" name="maxTransit" value="60" /> 60分</label>
+            </div>
+          </fieldset>
+          <fieldset id="radiusField" hidden>
+            <legend>搜索范围</legend>
+            <div class="choice-row two">
+              <label><input type="radio" name="radiusM" value="1500" /> 1.5km</label>
+              <label><input type="radio" name="radiusM" value="3000" checked /> 3km</label>
+              <label><input type="radio" name="radiusM" value="5000" /> 5km</label>
+              <label><input type="radio" name="radiusM" value="8000" /> 8km</label>
+            </div>
+          </fieldset>
 
           <div class="actions single">
             <button id="meetSearchButton" type="submit">搜索</button>
@@ -86,6 +123,6 @@
       </aside>
     </main>
 
-    <script src="/static/app.js?v=0113" defer></script>
+    <script src="/static/app.js?v=0114" defer></script>
   </body>
 </html>

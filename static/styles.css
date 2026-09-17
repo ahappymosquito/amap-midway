@@ -1,4 +1,4 @@
-/* 本文件实现多点选址布局、扫街榜六类选项、附近搭配推荐、酒店筛选和路线描边闪烁样式。 */
+/* 本文件实现多点选址布局、地点导入、通勤/距离比较、扫街榜六类选项和路线描边闪烁样式。 */
 :root {
   --bg: #eef2f6;
   --panel: #ffffff;
@@ -514,6 +514,29 @@ input {
   gap: 8px;
 }
 
+#importOriginButton {
+  grid-column: 1 / -1;
+}
+
+.import-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.import-panel[hidden] {
+  display: none;
+}
+
+.import-panel textarea {
+  width: 100%;
+  min-height: 96px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  resize: vertical;
+}
+
 .origin-history {
   display: grid;
   gap: 8px;
@@ -687,7 +710,9 @@ button[type="button"] {
 }
 
 #addOriginButton,
-#locateButton {
+#locateButton,
+#importOriginButton,
+#applyImportButton {
   width: 100%;
 }
 

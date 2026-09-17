@@ -277,6 +277,43 @@ def test_restaurant_search_marks_saojie_boards(client: TestClient) -> None:
     assert "amap.com/ranking/" in payload["amap_ranking_url"]
 
 
+def test_search_uses_distance_sort_and_custom_radius(client: TestClient) -> None:
+    response = client.post(
+        "/api/places/search",
+        json={
+            "origins": [{"address": "中国黄金大厦"}],
+            "category": "restaurant",
+            "sort_by": "distance",
+            "radius_m": 3000,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sort_by"] == "distance"
+    assert payload["radius_m"] == 3000
+    assert payload["places"]
+    assert payload["places"][0]["distance_m"] >= 0
+
+
+def test_search_filters_by_max_transit_minutes(client: TestClient) -> None:
+    response = client.post(
+        "/api/places/search",
+        json={
+            "origins": [{"address": "中国黄金大厦"}],
+            "category": "restaurant",
+            "max_transit_min": 20,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    for place in payload["places"]:
+        known = [item["transit_s"] for item in place["commutes"] if item.get("transit_s") is not None]
+        if known:
+            assert max(known) <= 20 * 60
+
+
 def test_play_search_accepts_category(client: TestClient) -> None:
     response = client.post(
         "/api/places/search",

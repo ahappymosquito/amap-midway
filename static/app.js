@@ -1,4 +1,4 @@
-// 本文件实现多点选址交互：网页定位、扫街榜六类选址、附近搭配推荐、酒店属性与携程房型筛选、美团/携程外链。
+// 本文件实现多点选址交互：网页定位、地点批量导入、按通勤时间或绝对距离比较、扫街榜六类选址。
 const state = {
   map: null,
   originMarkers: [],
@@ -37,6 +37,13 @@ const elements = {
   originsList: document.querySelector("#originsList"),
   locateButton: document.querySelector("#locateButton"),
   addOriginButton: document.querySelector("#addOriginButton"),
+  importOriginButton: document.querySelector("#importOriginButton"),
+  importPanel: document.querySelector("#importPanel"),
+  importOrigins: document.querySelector("#importOrigins"),
+  applyImportButton: document.querySelector("#applyImportButton"),
+  transitLimitField: document.querySelector("#transitLimitField"),
+  radiusField: document.querySelector("#radiusField"),
+  sortHint: document.querySelector("#sortHint"),
   peopleInput: document.querySelector("#peopleInput"),
   budgetInput: document.querySelector("#budgetInput"),
   budgetHint: document.querySelector("#budgetHint"),
@@ -136,6 +143,7 @@ async function init() {
   renderOriginInputs([]);
   bindControls();
   updateBudgetHint();
+  updateSortMode();
   renderOriginHistory();
   try {
     const config = await fetchJson("/api/config");
@@ -183,6 +191,28 @@ function bindControls() {
     state.originCount += 1;
     renderOriginInputs();
     persistOriginDraft();
+  });
+  if (elements.importOriginButton && elements.importPanel) {
+    elements.importOriginButton.addEventListener("click", () => {
+      elements.importPanel.hidden = !elements.importPanel.hidden;
+      if (!elements.importPanel.hidden && elements.importOrigins) {
+        elements.importOrigins.focus();
+      }
+    });
+  }
+  if (elements.applyImportButton) {
+    elements.applyImportButton.addEventListener("click", () => {
+      applyImportedNames(parsePlaceNames(elements.importOrigins?.value || "", 0));
+    });
+  }
+  document.querySelectorAll('input[name="sortBy"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      updateSortMode();
+      persistLastForm();
+    });
+  });
+  document.querySelectorAll('input[name="maxTransit"], input[name="radiusM"]').forEach((input) => {
+    input.addEventListener("change", persistLastForm);
   });
   elements.peopleInput.addEventListener("input", () => {
     updateBudgetHint();
@@ -310,6 +340,15 @@ function renderOriginInputs(presetRows) {
     });
     input.addEventListener("focus", () => {
       state.focusedOriginIndex = index;
+    });
+    input.addEventListener("paste", (event) => {
+      const text = event.clipboardData?.getData("text") || "";
+      const names = parsePlaceNames(text, 0);
+      if (names.length <= 1) {
+        return;
+      }
+      event.preventDefault();
+      applyImportedNames(names);
     });
     elements.originsList.appendChild(label);
   }
@@ -468,6 +507,9 @@ function persistLastForm() {
     category: getCategory(),
     people: Number(elements.peopleInput.value) || 2,
     budget: Number(elements.budgetInput.value) || 300,
+    sortBy: getSortBy(),
+    maxTransit: getMaxTransitMin() || 0,
+    radiusM: getRadiusM(),
   });
 }
 
@@ -488,6 +530,25 @@ function restoreLastForm() {
       radio.checked = true;
     }
   }
+  if (form.sortBy === "transit" || form.sortBy === "distance") {
+    const radio = document.querySelector(`input[name="sortBy"][value="${form.sortBy}"]`);
+    if (radio) {
+      radio.checked = true;
+    }
+  }
+  if (form.maxTransit != null) {
+    const radio = document.querySelector(`input[name="maxTransit"][value="${form.maxTransit}"]`);
+    if (radio) {
+      radio.checked = true;
+    }
+  }
+  if (form.radiusM) {
+    const radio = document.querySelector(`input[name="radiusM"][value="${form.radiusM}"]`);
+    if (radio) {
+      radio.checked = true;
+    }
+  }
+  updateSortMode();
 }
 
 function collectOriginValues() {
@@ -658,6 +719,9 @@ async function searchMeet() {
         category: getCategory(),
         people_count: Number(elements.peopleInput.value) || 2,
         budget_per_person: Number(elements.budgetInput.value) || 300,
+        sort_by: getSortBy(),
+        radius_m: getSortBy() === "distance" ? getRadiusM() : null,
+        max_transit_min: getSortBy() === "transit" ? getMaxTransitMin() : null,
       }),
     });
     clearOverlay();
@@ -973,6 +1037,10 @@ function placeItem(place, index) {
       return `<div class="commute-line">${originLetter(commuteIndex)} 地铁 ${formatDuration(commute.transit_s)} · 骑行 ${formatDuration(commute.riding_s)}</div>`;
     })
     .join("");
+  const distanceLine =
+    place.distance_m != null
+      ? `<div class="commute-line">最远直线 ${formatDistance(place.distance_m)}</div>`
+      : "";
   const costMeta = place.cost ? ` · ${costLabel} ¥${place.cost}` : place.category === "restaurant" ? " · 暂无人均" : " · 暂无人均";
   const saleRooms = (place.sale_rooms || []).slice(0, 4).map((name) => escapeHtml(name)).join("、");
   const saleLine = saleRooms ? `<div class="meta">携程房型 ${saleRooms}</div>` : "";
@@ -985,6 +1053,7 @@ function placeItem(place, index) {
     <div class="meta">${place.rating ? `评分 ${escapeHtml(place.rating)}` : "暂无评分"}${costMeta}</div>
     ${saleLine}
     ${commuteLines}
+    ${distanceLine}
     <div class="open-links">${renderOpenLinks(place)}</div>
   `;
   item.addEventListener("click", (event) => {
@@ -2037,6 +2106,69 @@ function clearMetroNetwork() {
 
 function getCategory() {
   return document.querySelector('input[name="category"]:checked')?.value || "restaurant";
+}
+
+function getSortBy() {
+  return document.querySelector('input[name="sortBy"]:checked')?.value || "transit";
+}
+
+function getMaxTransitMin() {
+  const value = Number(document.querySelector('input[name="maxTransit"]:checked')?.value || 0);
+  return value > 0 ? value : null;
+}
+
+function getRadiusM() {
+  return Number(document.querySelector('input[name="radiusM"]:checked')?.value || 3000);
+}
+
+function updateSortMode() {
+  const byDistance = getSortBy() === "distance";
+  if (elements.transitLimitField) {
+    elements.transitLimitField.hidden = byDistance;
+  }
+  if (elements.radiusField) {
+    elements.radiusField.hidden = !byDistance;
+  }
+  if (elements.sortHint) {
+    elements.sortHint.textContent = byDistance
+      ? "按各点到店的最远直线距离排序，并按所选范围搜索。"
+      : "按最慢一侧地铁时长排序。可设通勤上限。";
+  }
+}
+
+function parsePlaceNames(text, limit = MAX_ORIGINS) {
+  const parts = String(text || "")
+    .split(/[\n\r；;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const names = [];
+  for (const name of parts) {
+    if (!names.includes(name)) {
+      names.push(name);
+    }
+    if (limit > 0 && names.length >= limit) {
+      break;
+    }
+  }
+  return names;
+}
+
+function applyImportedNames(names) {
+  if (!names.length) {
+    setMessage("没有识别到地点，请分行或用分号隔开。", true);
+    return;
+  }
+  const used = names.slice(0, MAX_ORIGINS);
+  state.originCount = used.length;
+  renderOriginInputs(used.map((address) => ({ address })));
+  persistOriginDraft();
+  rememberOriginHistory(used);
+  if (elements.importPanel) {
+    elements.importPanel.hidden = true;
+  }
+  setMessage(
+    names.length > MAX_ORIGINS ? `已填入前 ${MAX_ORIGINS} 个地点，其余未导入。` : `已导入 ${used.length} 个地点。`,
+  );
 }
 
 function originLetter(index) {

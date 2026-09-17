@@ -1,6 +1,6 @@
 """距离计算模块。
 
-本文件实现经纬度球面距离、多点中心和搜索半径，供小区搜索和多点选址复用。
+本文件实现经纬度球面距离、多点中心和搜索半径夹取，供多点选址复用。
 """
 
 from math import asin, cos, radians, sin, sqrt
@@ -47,4 +47,10 @@ def search_radius_from_points(points: list[tuple[float, float]]) -> int:
 
     center_lng, center_lat = centroid(points)
     farthest = max(haversine_distance_m(center_lng, center_lat, lng, lat) for lng, lat in points)
-    return int(min(MAX_SEARCH_RADIUS_M, max(MIN_SEARCH_RADIUS_M, farthest * 1.2)))
+    return clamp_search_radius(int(farthest * 1.2))
+
+
+def clamp_search_radius(radius_m: int) -> int:
+    """把搜索半径限制在 1.5km 到 8km。"""
+
+    return int(min(MAX_SEARCH_RADIUS_M, max(MIN_SEARCH_RADIUS_M, radius_m)))

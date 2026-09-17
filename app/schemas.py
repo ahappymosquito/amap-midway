@@ -1,6 +1,6 @@
 """接口数据模型模块。
 
-本文件定义配置、地理编码、一到多个通勤点选址、地铁站与线路、多种出行方案折线和网页看价外链的 Pydantic 模型。
+本文件定义配置、地理编码、通勤点选址（含通勤时间/绝对距离排序）、地铁站与线路和网页看价外链的 Pydantic 模型。
 """
 
 from typing import Literal
@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 PlaceCategory = Literal["restaurant", "hotel", "play", "coffee", "bar", "scenic"]
+SortBy = Literal["transit", "distance"]
 
 
 class ConfigResponse(BaseModel):
@@ -62,6 +63,9 @@ class PlacesSearchRequest(BaseModel):
     city: str = Field(default="", max_length=40)
     people_count: int = Field(default=2, ge=1, le=8)
     budget_per_person: int = Field(default=300, ge=50, le=5000)
+    sort_by: SortBy = "transit"
+    radius_m: int | None = Field(default=None, ge=1500, le=8000)
+    max_transit_min: int | None = Field(default=None, ge=5, le=120)
 
 
 class CommuteTimes(BaseModel):
@@ -156,6 +160,7 @@ class Place(BaseModel):
     cost: float | None = None
     commutes: list[CommuteTimes]
     fairness_s: int = Field(ge=0)
+    distance_m: int = Field(default=0, ge=0)
     over_budget: bool = False
     budget_unknown: bool = False
     open_links: OpenLinks
@@ -190,6 +195,7 @@ class PlacesSearchResponse(BaseModel):
     amap_ranking_url: str = ""
     companions: list[Place] = Field(default_factory=list)
     companion_category: str = ""
+    sort_by: SortBy = "transit"
 
 
 class TransitDurationResponse(BaseModel):
