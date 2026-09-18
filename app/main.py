@@ -18,7 +18,7 @@ STATIC_DIR = BASE_DIR / "static"
 def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用。"""
 
-    app = FastAPI(title="高德多点选址", version="0.2.1")
+    app = FastAPI(title="高德多点选址", version="0.2.2")
     app.include_router(config.router)
     app.include_router(geocode.router)
     app.include_router(communities.router)
@@ -27,7 +27,10 @@ def create_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     async def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+        return FileResponse(
+            STATIC_DIR / "index.html",
+            headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+        )
 
     return app
 
