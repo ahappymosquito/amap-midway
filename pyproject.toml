@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "amap-midway"
-version = "0.2.0"
+version = "0.2.1"
 description = "高德多点选址可视化 FastAPI 单页应用"
 authors = ["Codex <codex@example.com>"]
 readme = "README.md"

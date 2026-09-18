@@ -2,7 +2,7 @@
 
 高德多点选址工具。打开页面会尝试定位并填入你的大致位置；一个地点即可搜索附近的美食、酒店、玩乐、咖啡、酒吧或景点。地点可逐个填写，也可分行或用分号批量导入。比较方式可选地铁通勤时间或直线距离。搜完会附带附近搭配推荐。点选后左上角浮窗列出多种路线，地图同一时间只显示一种出行方案。
 
-当前版本：`0.2.0`
+当前版本：`0.2.1`
 
 仓库：<https://github.com/ahappymosquito/amap-midway>
 
@@ -37,7 +37,7 @@ $env:AMAP_WEB_KEY="你的高德 Web 服务和 JS API Key"
 AMAP_WEB_KEY=你的高德 Web 服务和 JS API Key
 ```
 
-如果页面地图加载失败并出现 `USERKEY_PLAT_NOMATCH`，需要在高德控制台把 `amap.qrqto.club` 和本地 `127.0.0.1` 加入 JS API 域名白名单。
+如果页面地图加载失败并出现 `USERKEY_PLAT_NOMATCH`，需要在高德控制台把 `amap.tingle272.xyz` 和本地 `127.0.0.1` 加入 JS API 域名白名单。
 
 ## 安装与启动
 
@@ -47,9 +47,9 @@ poetry run uvicorn app.main:app --reload
 ```
 
 - 本地：<http://127.0.0.1:8000/>
-- 线上：<https://amap.qrqto.club/>
+- 线上：<https://amap.tingle272.xyz/>（旧域名 `amap.qrqto.club` 已弃用，会跳转到此）
 
-服务跑在 `ts3_qrqto` 的 `/home/ts3/amap_find`，由 systemd 服务 `amap-find` 监听 `127.0.0.1:8010`，Nginx 反代 `amap.qrqto.club`。
+服务跑在 `ts3` 的 `/home/ts3/amap_find`，由 systemd 服务 `amap-find` 监听 `127.0.0.1:8010`，Nginx 反代 `amap.tingle272.xyz`。
 
 ## API
 

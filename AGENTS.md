@@ -26,3 +26,4 @@
 - 高德 Key 通过 `AMAP_WEB_KEY` 环境变量配置，代码中不得硬编码 Key。
 - 前端采用 FastAPI 托管的原生 HTML/CSS/JS 单页，不引入 React/Vite 构建链。
 - 手机端筛选条放进控制面板，地图上只保留路线浮窗和状态条，避免与高德控件、图例互相遮挡；窄屏不显示地图缩放条。
+- 线上地址为 https://amap.tingle272.xyz/ ；旧域名 amap.qrqto.club 已弃用。
