@@ -1,18 +1,17 @@
-<!-- 本文件实现多点选址单页：网页定位、地名候选提示、地点批量导入、按通勤时间或绝对距离比较、扫街榜六类选址。 -->
+<!-- 本文件实现多点选址单页：网页定位、地名候选、地点导入、通勤/距离比较、扫街榜六类选址；手机端筛选条放进侧栏避免遮挡地图。 -->
 <!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>多点选址 · 餐馆酒店</title>
-    <link rel="stylesheet" href="/static/styles.css?v=0115" />
+    <link rel="stylesheet" href="/static/styles.css?v=0116" />
   </head>
   <body>
     <main class="app-shell">
       <section class="map-area" aria-label="选址地图">
         <div id="map" class="map"></div>
         <div id="routePanel" class="route-times" hidden></div>
-        <div id="boardBar" class="board-bar" hidden></div>
         <div id="mapLegend" class="map-legend" aria-hidden="true">
           <span class="legend-item mode-riding">出站骑行</span>
           <span class="legend-item mode-walk">步行换乘</span>
@@ -102,6 +101,7 @@
         </form>
 
         <div id="message" class="message" role="status"></div>
+        <div id="boardBar" class="board-bar" hidden></div>
 
         <section class="results-section" aria-label="搜索结果">
           <div class="results-header">
@@ -123,6 +123,6 @@
       </aside>
     </main>
 
-    <script src="/static/app.js?v=0115" defer></script>
+    <script src="/static/app.js?v=0116" defer></script>
   </body>
 </html>

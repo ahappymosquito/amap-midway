@@ -1,4 +1,4 @@
-// 本文件实现多点选址交互：网页定位、地名候选提示、地点批量导入、按通勤时间或绝对距离比较、扫街榜六类选址。
+// 本文件实现多点选址交互：网页定位、地名候选、地点导入、通勤/距离比较、扫街榜筛选；窄屏不叠加地图控件。
 const state = {
   map: null,
   originMarkers: [],
@@ -300,6 +300,15 @@ function bindControls() {
       hidePlaceSuggest();
     }
   });
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (isNarrowLayout() && state.suggestItems.length) {
+        hidePlaceSuggest();
+      }
+    },
+    true,
+  );
 }
 
 function readOriginRows() {
@@ -714,8 +723,10 @@ function initMap() {
     viewMode: "2D",
   });
   state.infoWindow = new AMap.InfoWindow({ offset: new AMap.Pixel(0, -28) });
-  state.map.addControl(new AMap.Scale());
-  state.map.addControl(new AMap.ToolBar({ position: "RT" }));
+  state.map.addControl(new AMap.Scale({ position: "LB" }));
+  if (!isNarrowLayout()) {
+    state.map.addControl(new AMap.ToolBar({ position: "RT" }));
+  }
 }
 
 async function searchMeet() {
@@ -1113,6 +1124,10 @@ function isDesktop() {
     return false;
   }
   return window.innerWidth >= 768;
+}
+
+function isNarrowLayout() {
+  return window.matchMedia("(max-width: 860px)").matches;
 }
 
 function renderOpenLinks(place) {
@@ -2178,6 +2193,7 @@ function renderPlaceSuggest(input, tips) {
       pickPlaceSuggest(input, Number(button.dataset.suggestIndex));
     });
   });
+  positionSuggestList(input, list);
 }
 
 function handleSuggestKeydown(event, input) {
@@ -2232,11 +2248,32 @@ function pickPlaceSuggest(input, index) {
   hidePlaceSuggest();
 }
 
+function positionSuggestList(input, list) {
+  if (!isNarrowLayout()) {
+    list.style.cssText = "";
+    return;
+  }
+  const rect = input.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom;
+  list.style.position = "fixed";
+  list.style.left = `${Math.max(8, rect.left)}px`;
+  list.style.width = `${rect.width}px`;
+  list.style.right = "auto";
+  if (spaceBelow < 180 && rect.top > spaceBelow) {
+    list.style.top = "auto";
+    list.style.bottom = `${Math.max(8, window.innerHeight - rect.top + 4)}px`;
+  } else {
+    list.style.top = `${rect.bottom + 4}px`;
+    list.style.bottom = "auto";
+  }
+}
+
 function hidePlaceSuggest() {
   window.clearTimeout(state.suggestTimer);
   document.querySelectorAll(".origin-suggest").forEach((list) => {
     list.hidden = true;
     list.innerHTML = "";
+    list.style.cssText = "";
   });
   state.suggestInput = null;
   state.suggestItems = [];

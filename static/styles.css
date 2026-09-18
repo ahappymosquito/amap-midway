@@ -1,4 +1,4 @@
-/* 本文件实现多点选址布局、地名候选、地点导入、通勤/距离比较、扫街榜六类选项和路线描边闪烁样式。 */
+/* 本文件实现多点选址布局、地名候选、地点导入、通勤/距离比较、扫街榜筛选和手机端浮层避让。 */
 :root {
   --bg: #eef2f6;
   --panel: #ffffff;
@@ -227,14 +227,14 @@ input {
 }
 
 .board-bar {
-  position: absolute;
+  position: fixed;
   z-index: 11;
   top: 16px;
-  right: 16px;
+  right: calc(400px + 16px);
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-width: min(420px, calc(100% - 32px));
+  max-width: min(420px, calc(100% - 432px));
   max-height: min(42dvh, 320px);
   overflow: auto;
   padding: 8px;
@@ -509,7 +509,7 @@ input {
 
 .origin-suggest {
   position: absolute;
-  z-index: 20;
+  z-index: 40;
   top: calc(100% + 4px);
   right: 0;
   left: 0;
@@ -982,42 +982,96 @@ button:disabled {
 
 @media (max-width: 860px) {
   .app-shell {
+    display: flex;
+    flex-direction: column;
     grid-template-columns: 1fr;
-    grid-template-rows: 52dvh auto;
+    min-height: 100svh;
+  }
+
+  .map-area {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    flex: 0 0 42svh;
+    min-height: 42svh;
+    height: 42svh;
   }
 
   .map-area,
   .map {
-    min-height: 52dvh;
+    min-height: 42svh;
+    height: 42svh;
   }
 
   .control-panel {
+    z-index: 6;
+    flex: 1 1 auto;
     height: auto;
-    min-height: 48dvh;
+    min-height: 0;
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    overflow: visible;
     border-top: 1px solid var(--border);
     border-left: 0;
   }
 
-  .route-times,
-  .map-legend,
   .board-bar {
-    max-width: calc(100% - 24px);
+    position: static;
+    top: auto;
+    right: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+  }
+
+  .route-times {
+    top: max(8px, env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    min-width: 0;
+    max-width: none;
+    max-height: 34svh;
+    padding: 8px 10px;
+  }
+
+  .map-status {
+    left: max(8px, env(safe-area-inset-left));
+    right: 88px;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    max-width: none;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .map-legend {
+    display: none;
   }
 
   .choice-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .info-card {
+    min-width: 0;
+    max-width: min(260px, 78vw);
+  }
+
+  .origin-suggest {
+    position: fixed;
+    max-height: 40svh;
   }
 }
 
 @media (max-width: 520px) {
-  .control-panel {
-    padding: 16px;
-  }
-
   .coord-grid,
   .actions,
   .radius-options,
   .mode-tabs {
     grid-template-columns: 1fr;
+  }
+
+  .board-chip,
+  .board-link {
+    min-height: 36px;
   }
 }
